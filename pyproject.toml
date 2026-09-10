@@ -1,0 +1,38 @@
+[project]
+name = "siftdb"
+version = "0.1.0"
+description = "A vector database built from scratch: HNSW, product quantization, filtered search, WAL durability and learned early termination, in Python + Numba."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "numba",
+    "grpcio",
+    "protobuf",
+    "lightgbm",
+    "pyyaml",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+bench = ["faiss-cpu", "matplotlib"]
+rest = ["fastapi", "uvicorn"]
+
+[dependency-groups]
+dev = ["pytest", "grpcio-tools", "ruff"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["proto/*_pb2*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E741"]

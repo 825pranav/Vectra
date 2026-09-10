@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.nbi
+*.nbc
+data/
+bench/results/*
+!bench/results/.gitkeep
+!bench/results/*.svg
+!bench/results/*.json
+*.egg-info/

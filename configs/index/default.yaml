@@ -1,0 +1,46 @@
+# Default collection configuration. Every tunable lives here; collections store
+# a resolved copy at creation time, and CreateCollection options override keys
+# by dotted path (e.g. "hnsw.M" -> "32").
+metric: l2                # l2 | cosine
+index: hnsw               # flat | hnsw | hnsw_pq
+initial_capacity: 1024    # rows preallocated for vectors, graph and attributes
+
+hnsw:
+  M: 16                   # max links per node on upper layers (layer 0 uses 2*M)
+  ef_construction: 200
+  ef_search: 64           # default query budget when no early-stop model is loaded
+  max_level: 12
+  seed: 42
+  serial_warmup: 1024     # first nodes are inserted one at a time
+  batch_fraction: 0.02    # afterwards, batches of this fraction of the current graph
+  max_batch: 8192
+
+pq:
+  m: 16                   # subvectors per vector (bytes per code)
+  ksub: 256
+  train_size: 65536       # PQ trains once the collection holds this many vectors
+  kmeans_iters: 20
+  seed: 42
+  rerank: 3000            # exact re-rank depth over PQ-ranked candidates
+  device: cpu             # cpu | cuda (codebook training only)
+
+planner:
+  brute_force_max_selectivity: 0.02   # at or below: scan only matching ids
+  post_filter_min_selectivity: 0.5    # at or above: plain HNSW + post-filter
+  post_filter_max_ef: 1024
+  mask_cache_size: 64
+  stats_refresh_fraction: 0.1         # re-analyse attributes after this much churn
+
+early_stop:
+  model: null             # path to a trained early-stop model (.json); null disables
+  mode: checkpoint        # checkpoint | upfront
+  multiplier: 1.0
+
+durability:
+  fsync: true
+  snapshot_every: 200000  # WAL records between automatic snapshots (0 disables)
+
+server:
+  host: 127.0.0.1
+  port: 50051
+  max_workers: 16
