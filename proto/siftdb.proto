@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package siftdb;
+
+// SiftDB: vector search with attribute filtering.
+service SiftDB {
+  rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionReply);
+  rpc DropCollection(DropCollectionRequest) returns (DropCollectionReply);
+  rpc Upsert(UpsertRequest) returns (UpsertReply);
+  rpc Search(SearchRequest) returns (SearchReply);
+  rpc Delete(DeleteRequest) returns (DeleteReply);
+  rpc Stats(StatsRequest) returns (StatsReply);
+}
+
+message CreateCollectionRequest {
+  string name = 1;
+  uint32 dim = 2;
+  // Dotted-path config overrides, e.g. {"hnsw.M": "32", "metric": "cosine"}.
+  // Values are parsed as YAML scalars.
+  map<string, string> options = 3;
+}
+
+message CreateCollectionReply {}
+
+message DropCollectionRequest { string name = 1; }
+message DropCollectionReply {}
+
+message Attribute {
+  oneof value {
+    double num = 1;
+    string txt = 2;
+    bool flag = 3;
+  }
+}
+
+message Record {
+  string id = 1;
+  repeated float vector = 2 [packed = true];
+  map<string, Attribute> attributes = 3;
+}
+
+message UpsertRequest {
+  string collection = 1;
+  repeated Record records = 2;
+}
+
+message UpsertReply { uint64 upserted = 1; }
+
+message SearchRequest {
+  string collection = 1;
+  repeated float vector = 2 [packed = true];
+  uint32 k = 3;
+  // Filter expression, e.g. `price < 500 AND category == "shoes"`. Empty = none.
+  string filter = 4;
+  // Explicit search budget; 0 = let the planner / early-stop model decide.
+  uint32 ef = 5;
+  bool include_attributes = 6;
+}
+
+message Hit {
+  string id = 1;
+  float distance = 2;
+  map<string, Attribute> attributes = 3;
+}
+
+message SearchReply {
+  repeated Hit hits = 1;
+  // How the planner executed this query (for debugging and benchmarks).
+  string strategy = 2;
+  uint32 ef = 3;
+  float selectivity = 4;
+}
+
+message DeleteRequest {
+  string collection = 1;
+  repeated string ids = 2;
+}
+
+message DeleteReply { uint64 deleted = 1; }
+
+message StatsRequest { string collection = 1; }
+
+message StatsReply {
+  string name = 1;
+  uint32 dim = 2;
+  string metric = 3;
+  string index = 4;
+  uint64 count = 5;
+  uint64 deleted = 6;
+  uint64 index_bytes = 7;
+  uint64 lsn = 8;
+}
