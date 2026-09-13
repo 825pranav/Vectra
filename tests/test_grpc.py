@@ -55,7 +55,7 @@ def test_end_to_end(stub, data):
     assert rep.hits[0].attributes["price"].num == 321.0
     assert rep.hits[0].attributes["cat"].txt == "c0"
     assert len(rep.hits) == 5
-    assert rep.strategy == "flat"
+    assert rep.strategy == "hnsw"
 
     stub.Delete(pb.DeleteRequest(collection="e2e", ids=["doc321"]))
     rep = stub.Search(pb.SearchRequest(collection="e2e", vector=data[321].tolist(), k=5))

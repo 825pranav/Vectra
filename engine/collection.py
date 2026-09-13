@@ -34,6 +34,7 @@ import numpy as np
 from engine.config import apply_dotted, default_config
 from index.distance import normalize
 from index.flat import search_flat
+from index.hnsw import HNSWIndex
 from storage.meta import AttrValue, MetaStore
 from storage.vectors import VectorStore
 
@@ -75,6 +76,9 @@ class Collection:
         self.deleted = np.zeros(cap, dtype=np.uint8)
         self.n = 0  # published count of internal ids (readers only look below it)
         self.n_deleted = 0
+        self.hnsw: HNSWIndex | None = None
+        if self.index_type in ("hnsw", "hnsw_pq"):
+            self.hnsw = HNSWIndex.from_config(self.dim, cfg, capacity=cap)
 
     # ---- lifecycle --------------------------------------------------------
 
@@ -113,12 +117,15 @@ class Collection:
 
     def _recover(self) -> None:
         self.meta.load_from_sqlite()
-        self.n = self.meta.count
-        self._ensure_capacity(self.n)
+        n = self.meta.count
+        self._ensure_capacity(n)
         for i, u in enumerate(self.meta.internal_to_user):
             if u is None:
                 self.deleted[i] = 1
-        self.n_deleted = int(self.deleted[: self.n].sum())
+        self.n_deleted = int(self.deleted[:n].sum())
+        if self.hnsw is not None:
+            self.hnsw.add(self.store.array, n)
+        self.n = n
 
     def close(self) -> None:
         with self._lock:
@@ -174,9 +181,13 @@ class Collection:
     ) -> None:
         end = int(new_ids.max()) + 1
         self._ensure_capacity(end)
+        # Vector first, then metadata, then graph edges: by the time any edge
+        # points at a new node, everything a reader could fetch for it exists.
         self.store.write(new_ids, vecs)
         self.meta.apply_upsert(new_ids, ids, attrs, replaced)
         self._tombstone(replaced)
+        if self.hnsw is not None:
+            self.hnsw.add(self.store.array, end)
         self.n = max(self.n, end)
 
     def delete(self, ids: list[str]) -> int:
@@ -197,6 +208,9 @@ class Collection:
             self.n_deleted += int(fresh.size)
 
     def _ensure_capacity(self, rows: int) -> None:
+        # Order matters for lock-free readers, which capture the graph first and
+        # the vectors/tombstones second: everything a graph can reference must
+        # already be at least as large as the graph.
         self.store.ensure_capacity(rows)
         if rows > self.deleted.shape[0]:
             cap = self.deleted.shape[0]
@@ -205,6 +219,8 @@ class Collection:
             grown = np.zeros(cap, dtype=np.uint8)
             grown[: self.deleted.shape[0]] = self.deleted
             self.deleted = grown
+        if self.hnsw is not None:
+            self.hnsw.ensure_capacity(rows)
 
     # ---- reads ------------------------------------------------------------
 
@@ -219,9 +235,19 @@ class Collection:
         q = self._prepare_vectors(vector)[0]
         if k <= 0:
             raise InvalidArgument("k must be positive")
-        n, deleted, vecs = self.n, self.deleted, self.store.array
-        internal, dists = search_flat(vecs, n, q, k, deleted)
-        return self._result(internal, dists, "flat", 0, 1.0, include_attributes)
+        if ef is not None and ef <= 0:
+            raise InvalidArgument("ef must be positive")
+        if filter:
+            raise InvalidArgument("filtered search is not supported yet")
+        # Capture order: graph, then count, vectors and tombstones (see _ensure_capacity).
+        g = self.hnsw.g if self.hnsw is not None else None
+        n, vecs, deleted = self.n, self.store.array, self.deleted
+        if g is None:
+            internal, dists = search_flat(vecs, n, q, k, deleted)
+            return self._result(internal, dists, "flat", 0, 1.0, include_attributes)
+        ef = int(ef or self.cfg["hnsw"]["ef_search"])
+        internal, dists, st = self.hnsw.search(vecs, q, k, ef, deleted, g=g)
+        return self._result(internal, dists, "hnsw", ef, 1.0, include_attributes, st)
 
     def _result(
         self,
@@ -261,4 +287,5 @@ class Collection:
         }
 
     def index_bytes(self) -> int:
-        return self.store.nbytes(self.n)
+        graph = self.hnsw.nbytes() if self.hnsw is not None else 0
+        return self.store.nbytes(self.n) + graph

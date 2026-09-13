@@ -4,9 +4,9 @@ import pytest
 from engine.collection import Collection, InvalidArgument
 
 
-@pytest.fixture
-def col(tmp_path):
-    c = Collection.create(tmp_path / "c", "c", dim=32, overrides={"index": "flat"})
+@pytest.fixture(params=["flat", "hnsw"])
+def col(request, tmp_path):
+    c = Collection.create(tmp_path / "c", "c", dim=32, overrides={"index": request.param})
     yield c
     c.close()
 
@@ -46,8 +46,9 @@ def test_delete(col, small_data):
     assert col.stats()["count"] == 9
 
 
-def test_persistence(tmp_path, small_data):
-    c = Collection.create(tmp_path / "p", "p", dim=32, overrides={"index": "flat"})
+@pytest.mark.parametrize("index", ["flat", "hnsw"])
+def test_persistence(tmp_path, small_data, index):
+    c = Collection.create(tmp_path / "p", "p", dim=32, overrides={"index": index})
     c.upsert([f"v{i}" for i in range(50)], small_data[:50], [{"i": float(i)} for i in range(50)])
     c.delete(["v7"])
     c.store.flush()
@@ -87,10 +88,39 @@ def test_validation(col, small_data):
         col.upsert(["b"], small_data[1:2], [{"price": "cheap"}])
 
 
-def test_capacity_growth(tmp_path, small_data):
+@pytest.mark.parametrize("index", ["flat", "hnsw"])
+def test_capacity_growth(tmp_path, small_data, index):
     c = Collection.create(
-        tmp_path / "g", "g", dim=32, overrides={"index": "flat", "initial_capacity": 4}
+        tmp_path / "g", "g", dim=32, overrides={"index": index, "initial_capacity": 4}
     )
     c.upsert([f"v{i}" for i in range(200)], small_data[:200])
     assert c.search(small_data[150], k=1).ids == ["v150"]
+    c.close()
+
+
+def test_hnsw_matches_flat_on_small_collection(tmp_path, small_data):
+    flat = Collection.create(tmp_path / "f", "f", dim=32, overrides={"index": "flat"})
+    hnsw = Collection.create(tmp_path / "h", "h", dim=32, overrides={"index": "hnsw"})
+    ids = [f"v{i}" for i in range(len(small_data))]
+    flat.upsert(ids, small_data)
+    hnsw.upsert(ids, small_data)
+    rng = np.random.default_rng(1)
+    hits = 0
+    for q in small_data[rng.choice(len(small_data), 50, replace=False)] + 0.05:
+        a = flat.search(q, k=10).ids
+        b = hnsw.search(q, k=10, ef=128).ids
+        hits += len(set(a) & set(b))
+    assert hits / 500 >= 0.95
+    assert hnsw.search(small_data[0], k=3).strategy == "hnsw"
+    flat.close()
+    hnsw.close()
+
+
+def test_upserts_in_many_small_batches(tmp_path, small_data):
+    c = Collection.create(tmp_path / "b", "b", dim=32, overrides={"initial_capacity": 8})
+    for start in range(0, 600, 37):
+        stop = min(start + 37, 600)
+        c.upsert([f"v{i}" for i in range(start, stop)], small_data[start:stop])
+    for i in (0, 36, 37, 300, 599):
+        assert c.search(small_data[i], k=1).ids == [f"v{i}"]
     c.close()
