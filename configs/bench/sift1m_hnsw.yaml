@@ -1,0 +1,23 @@
+# siftdb HNSW vs FAISS HNSW on SIFT1M at matched graph parameters.
+#   python -m bench.run configs/bench/sift1m_hnsw.yaml
+experiment: ann_curves
+title: "SIFT1M: siftdb HNSW vs FAISS HNSW (M=16, efConstruction=200)"
+dataset: sift1m
+k: 10
+threads: 16            # batch QPS threads, also used for index builds
+warmup: 3
+runs: 5
+latency_queries: 2000  # single-thread per-query latency sample (first N test queries)
+recall_targets: [0.95]
+engines:
+  - name: siftdb-hnsw
+    kind: siftdb_hnsw
+    M: 16
+    ef_construction: 200
+    seed: 42
+    sweep: [10, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384]
+  - name: faiss-hnsw
+    kind: faiss_hnsw
+    M: 16
+    ef_construction: 200
+    sweep: [10, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384]
