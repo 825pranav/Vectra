@@ -53,6 +53,7 @@ import numpy as np
 from numba import njit, prange
 
 from index.distance import _njit_l2sq
+from index.pq import _njit_adc, _njit_lut
 
 EMPTY = -1
 _MAX_THREADS = numba.config.NUMBA_NUM_THREADS
@@ -487,6 +488,156 @@ def _njit_query_batch(
 
 
 # ---------------------------------------------------------------------------
+# PQ-inside-HNSW: traverse on ADC distances, re-rank exactly
+# ---------------------------------------------------------------------------
+
+
+@njit(cache=True, fastmath=True, nogil=True)
+def _njit_greedy_adc(lut, codes, g, rowbase, offset, cur, dcur):
+    ndist = 0
+    changed = True
+    while changed:
+        changed = False
+        row = cur if offset < 0 else rowbase[cur] + offset
+        for j in range(g.shape[1]):
+            e = g[row, j]
+            if e < 0:
+                break
+            d = _njit_adc(lut, codes, e)
+            ndist += 1
+            if d < dcur:
+                dcur = d
+                cur = e
+                changed = True
+    return cur, dcur, ndist
+
+
+@njit(cache=True, fastmath=True, nogil=True)
+def _njit_search_l0_adc(
+    lut, codes, nbr0, ep, dep, ef, pool, deleted, mask, use_mask, visited, tag, max_hops
+):
+    """Layer-0 search on compressed distances.
+
+    Same traversal as ``_njit_search_l0``, plus a bounded max-heap ("pool") of
+    the ``pool`` best accepted nodes seen anywhere during the walk: those are
+    the re-rank candidates. The pool can be deeper than ``ef`` because ADC
+    ordering is approximate: the true neighbours are usually *visited* but not
+    always ranked into the top ``ef`` by their compressed distance.
+    """
+    cap = max(64, 4 * ef)
+    cd = np.empty(cap, dtype=np.float32)
+    ci = np.empty(cap, dtype=np.int32)
+    wd = np.empty(ef + 1, dtype=np.float32)
+    wi = np.empty(ef + 1, dtype=np.int32)
+    pd = np.empty(pool + 1, dtype=np.float32)
+    pi = np.empty(pool + 1, dtype=np.int32)
+    visited[ep] = tag
+    nc = _njit_minheap_push(cd, ci, 0, dep, ep)
+    nw = 0
+    npool = 0
+    if deleted[ep] == 0 and (not use_mask or mask[ep]):
+        nw = _njit_maxheap_push(wd, wi, 0, dep, ep)
+        npool = _njit_maxheap_push(pd, pi, 0, dep, ep)
+    hops = 0
+    ndist = 0
+    width = nbr0.shape[1]
+    while nc > 0:
+        dc = cd[0]
+        c = ci[0]
+        if nw >= ef and dc > wd[0]:
+            break
+        if max_hops >= 0 and hops >= max_hops:
+            break
+        nc = _njit_minheap_pop(cd, ci, nc)
+        hops += 1
+        for j in range(width):
+            e = nbr0[c, j]
+            if e < 0:
+                break
+            if visited[e] == tag:
+                continue
+            visited[e] = tag
+            de = _njit_adc(lut, codes, e)
+            ndist += 1
+            accepted = deleted[e] == 0 and (not use_mask or mask[e])
+            if accepted and (npool < pool or de < pd[0]):
+                npool = _njit_maxheap_push(pd, pi, npool, de, e)
+                if npool > pool:
+                    npool = _njit_maxheap_pop(pd, pi, npool)
+            if nw < ef or de < wd[0]:
+                if nc == cd.shape[0]:
+                    cd, ci = _njit_grow(cd, ci)
+                nc = _njit_minheap_push(cd, ci, nc, de, e)
+                if accepted:
+                    nw = _njit_maxheap_push(wd, wi, nw, de, e)
+                    if nw > ef:
+                        nw = _njit_maxheap_pop(wd, wi, nw)
+    out_i, out_d = _njit_drain_maxheap(pd, pi, npool)
+    return out_i, out_d, hops, ndist
+
+
+@njit(cache=True, fastmath=True, nogil=True)
+def _njit_rerank(q, vecs, ids, k):
+    """Exact distances for candidate ``ids``; return the true top-k among them."""
+    kk = min(k, ids.shape[0])
+    hd = np.empty(kk + 1, dtype=np.float32)
+    hi = np.empty(kk + 1, dtype=np.int32)
+    n = 0
+    for a in range(ids.shape[0]):
+        d = _njit_l2sq(q, vecs[ids[a]])
+        if n < kk or d < hd[0]:
+            n = _njit_maxheap_push(hd, hi, n, d, ids[a])
+            if n > kk:
+                n = _njit_maxheap_pop(hd, hi, n)
+    return _njit_drain_maxheap(hd, hi, n)
+
+
+@njit(cache=True, fastmath=True, nogil=True)
+def _njit_query_pq(
+    q, codebooks, codes, vecs, nbr0, upper, upper_row, entry, max_level, k, ef, rerank,
+    deleted, mask, use_mask, visited, tag, max_hops,
+):  # fmt: skip
+    lut = _njit_lut(q, codebooks)
+    cur = entry
+    dcur = _njit_adc(lut, codes, cur)
+    nd0 = 1
+    for l in range(max_level, 0, -1):
+        cur, dcur, nd = _njit_greedy_adc(lut, codes, upper, upper_row, l - 1, cur, dcur)
+        nd0 += nd
+    pool = max(rerank, k)
+    cand, _, hops, nd = _njit_search_l0_adc(
+        lut, codes, nbr0, cur, dcur, max(ef, k), pool, deleted, mask, use_mask,
+        visited, tag, max_hops,
+    )  # fmt: skip
+    ids, ds = _njit_rerank(q, vecs, cand, k)
+    return ids, ds, hops, nd + nd0, cand.shape[0]
+
+
+@njit(cache=True, fastmath=True, nogil=True, parallel=True)
+def _njit_query_pq_batch(
+    Q, codebooks, codes, vecs, nbr0, upper, upper_row, entry, max_level, k, ef, rerank,
+    deleted, visited, tag_base,
+):  # fmt: skip
+    nq = Q.shape[0]
+    out_i = np.full((nq, k), -1, dtype=np.int32)
+    out_d = np.full((nq, k), np.inf, dtype=np.float32)
+    ndist = np.zeros(nq, dtype=np.int64)
+    dummy = np.zeros(1, dtype=np.bool_)
+    for i in prange(nq):
+        tid = numba.get_thread_id()
+        tag = np.uint32(tag_base + i + 1)
+        ids, ds, _, nd, _ = _njit_query_pq(
+            Q[i], codebooks, codes, vecs, nbr0, upper, upper_row, entry, max_level, k, ef,
+            rerank, deleted, dummy, False, visited[tid], tag, -1,
+        )  # fmt: skip
+        ndist[i] = nd
+        for j in range(ids.shape[0]):
+            out_i[i, j] = ids[j]
+            out_d[i, j] = ds[j]
+    return out_i, out_d, ndist
+
+
+# ---------------------------------------------------------------------------
 # Python-side index
 # ---------------------------------------------------------------------------
 
@@ -732,6 +883,59 @@ class HNSWIndex:
         return _njit_query_batch(
             np.ascontiguousarray(Q, dtype=np.float32), vecs, g.nbr0, g.upper, g.upper_row,
             g.entry, g.max_level, k, int(ef or self.ef_search), deleted, visited, base,
+        )  # fmt: skip
+
+    def search_pq(
+        self,
+        vecs: np.ndarray,
+        codebooks: np.ndarray,
+        codes: np.ndarray,
+        q: np.ndarray,
+        k: int,
+        ef: int | None = None,
+        rerank: int = 3000,
+        deleted: np.ndarray | None = None,
+        mask: np.ndarray | None = None,
+        max_hops: int = -1,
+        g: HNSWGraph | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
+        """PQ-inside-HNSW: traverse on ADC distances, exact re-rank of up to
+        ``rerank`` candidates from ``vecs`` (the full-precision memmap)."""
+        g = g or self.g
+        if g.entry < 0:
+            return np.empty(0, np.int32), np.empty(0, np.float32), {"hops": 0, "ndist": 0}
+        if deleted is None:
+            deleted = np.zeros(g.capacity, dtype=np.uint8)
+        use_mask = mask is not None
+        if mask is None:
+            mask = np.zeros(1, dtype=np.bool_)
+        visited, tag = self._visited(g.capacity)
+        ids, ds, hops, nd, nr = _njit_query_pq(
+            q, codebooks, codes, vecs, g.nbr0, g.upper, g.upper_row, g.entry, g.max_level,
+            k, int(ef or self.ef_search), int(rerank), deleted, mask, use_mask, visited, tag,
+            max_hops,
+        )  # fmt: skip
+        return ids, ds, {"hops": int(hops), "ndist": int(nd), "reranked": int(nr)}
+
+    def search_pq_batch(
+        self,
+        vecs: np.ndarray,
+        codebooks: np.ndarray,
+        codes: np.ndarray,
+        Q: np.ndarray,
+        k: int,
+        ef: int | None = None,
+        rerank: int = 3000,
+        deleted: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        g = self.g
+        if deleted is None:
+            deleted = np.zeros(g.capacity, dtype=np.uint8)
+        visited, base = self._batch_state(g.capacity, Q.shape[0])
+        return _njit_query_pq_batch(
+            np.ascontiguousarray(Q, dtype=np.float32), codebooks, codes, vecs, g.nbr0,
+            g.upper, g.upper_row, g.entry, g.max_level, k, int(ef or self.ef_search),
+            int(rerank), deleted, visited, base,
         )  # fmt: skip
 
     def _batch_state(self, cap: int, nq: int) -> tuple[np.ndarray, int]:

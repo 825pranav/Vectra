@@ -21,7 +21,8 @@ pq:
   train_size: 65536       # PQ trains once the collection holds this many vectors
   kmeans_iters: 20
   seed: 42
-  rerank: 3000            # exact re-rank depth over PQ-ranked candidates
+  rerank_factor: 2        # exact re-rank depth = factor * ef (tuned on SIFT1M learn split)
+  rerank_max: 3000        # cap on re-rank depth
   device: cpu             # cpu | cuda (codebook training only)
 
 planner:
