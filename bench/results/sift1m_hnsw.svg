@@ -417,28 +417,28 @@ L 516.6 290.630469
    </g>
    <g id="legend_1">
     <g id="line2d_36">
-     <path d="M 55.360273 261.412109 
-L 65.360273 261.412109 
-L 75.360273 261.412109 
+     <path d="M 55.360273 37.817676 
+L 65.360273 37.817676 
+L 75.360273 37.817676 
 " style="fill: none; stroke: #2a78d6; stroke-width: 2; stroke-linecap: square"/>
      <g>
-      <use xlink:href="#md389fbe863" x="65.360273" y="261.412109" style="fill: #2a78d6; stroke: #fcfcfb; stroke-width: 1.2"/>
+      <use xlink:href="#md389fbe863" x="65.360273" y="37.817676" style="fill: #2a78d6; stroke: #fcfcfb; stroke-width: 1.2"/>
      </g>
     </g>
     <g id="text_18">
-     <text style="font-size: 10px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="83.360273" y="264.912109" transform="rotate(-0 83.360273 264.912109)">siftdb-hnsw</text>
+     <text style="font-size: 10px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="83.360273" y="41.317676" transform="rotate(-0 83.360273 41.317676)">siftdb-hnsw</text>
     </g>
     <g id="line2d_37">
-     <path d="M 55.360273 276.025977 
-L 65.360273 276.025977 
-L 75.360273 276.025977 
+     <path d="M 55.360273 52.431543 
+L 65.360273 52.431543 
+L 75.360273 52.431543 
 " style="fill: none; stroke: #eb6834; stroke-width: 2; stroke-linecap: square"/>
      <g>
-      <use xlink:href="#m1fd09e1a79" x="65.360273" y="276.025977" style="fill: #eb6834; stroke: #fcfcfb; stroke-width: 1.2"/>
+      <use xlink:href="#m1fd09e1a79" x="65.360273" y="52.431543" style="fill: #eb6834; stroke: #fcfcfb; stroke-width: 1.2"/>
      </g>
     </g>
     <g id="text_19">
-     <text style="font-size: 10px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="83.360273" y="279.525977" transform="rotate(-0 83.360273 279.525977)">faiss-hnsw</text>
+     <text style="font-size: 10px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="83.360273" y="55.931543" transform="rotate(-0 83.360273 55.931543)">faiss-hnsw</text>
     </g>
    </g>
   </g>

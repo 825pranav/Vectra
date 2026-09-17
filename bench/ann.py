@@ -130,6 +130,55 @@ class SiftdbHNSW(Engine):
         return self.index.search(self.base, q, k, p)[0]
 
 
+class SiftdbHNSWPQ(SiftdbHNSW):
+    """Same graph as siftdb-hnsw, traversed on PQ codes, exact re-rank of
+    ``rerank_factor * ef`` candidates from the full-precision vectors."""
+
+    def build(self, rebuild: bool) -> dict[str, Any]:
+        from index.pq import ProductQuantizer
+
+        meta = super().build(rebuild)
+        s = self.spec
+        stem = f"{self.dataset}_siftdb_pq_m{s['m']}_n{s['train_size']}_seed{s.get('seed', 42)}"
+        path = CACHE / f"{stem}.npz"
+        self.pq = ProductQuantizer(self.dim, m=s["m"], iters=s.get("kmeans_iters", 20),
+                                   seed=s.get("seed", 42))  # fmt: skip
+        if path.exists() and not rebuild:
+            with np.load(path) as z:
+                self.pq.codebooks, self.codes = z["codebooks"], z["codes"]
+            pq_meta = json.loads((CACHE / f"{stem}.json").read_text())
+        else:
+            rng = np.random.default_rng(s.get("seed", 42))
+            sample = self.base[rng.choice(len(self.base), s["train_size"], replace=False)]
+            t = time.perf_counter()
+            self.pq.train(sample)
+            t_train = time.perf_counter() - t
+            t = time.perf_counter()
+            self.codes = self.pq.encode(self.base)
+            pq_meta = {"pq_train_s": t_train, "pq_encode_s": time.perf_counter() - t}
+            np.savez(path, codebooks=self.pq.codebooks, codes=self.codes)
+            (CACHE / f"{stem}.json").write_text(json.dumps(pq_meta))
+        meta.update(pq_meta)
+        meta["build_s"] = meta["build_s"] + pq_meta["pq_train_s"] + pq_meta["pq_encode_s"]
+        meta["code_bytes"] = int(self.codes.nbytes + self.pq.nbytes())
+        meta["vector_bytes_float"] = int(self.base.nbytes)
+        # full-precision vectors stay on disk (memmap) and are only touched to re-rank
+        meta["index_bytes"] = meta["graph_bytes"] + meta["code_bytes"]
+        self.factor = int(s.get("rerank_factor", 2))
+        return meta
+
+    def _r(self, p: int) -> int:
+        return max(10, self.factor * int(p))
+
+    def batch(self, Q, k, p):
+        cb = self.pq.codebooks
+        return self.index.search_pq_batch(self.base, cb, self.codes, Q, k, p, self._r(p))[0]
+
+    def single(self, q, k, p):
+        cb = self.pq.codebooks
+        return self.index.search_pq(self.base, cb, self.codes, q, k, p, self._r(p))[0]
+
+
 class _FaissSingle:
     def __init__(self, threads: int) -> None:
         self.threads = threads
@@ -225,9 +274,13 @@ class FaissIVFPQ(Engine):
             faiss.write_index(self.index, str(path))
             self._meta_path().write_text(json.dumps(meta))
         if s.get("refine_k_factor"):
+            # IndexRefineFlat keeps full float vectors in RAM for the exact re-rank
+            self._owner = self.index  # downcast wrappers do not own the C++ object
             self.index = faiss.downcast_index(self.index)
             self.index.k_factor = float(s["refine_k_factor"])
-        self.ivf = faiss.extract_index_ivf(self.index)
+            self.ivf = faiss.extract_index_ivf(faiss.downcast_index(self.index.base_index))
+        else:
+            self.ivf = faiss.extract_index_ivf(self.index)
         meta["index_bytes"] = int(faiss.serialize_index(self.index).nbytes)
         return meta
 
@@ -247,6 +300,7 @@ class FaissIVFPQ(Engine):
 
 ENGINES: dict[str, type[Engine]] = {
     "siftdb_hnsw": SiftdbHNSW,
+    "siftdb_hnsw_pq": SiftdbHNSWPQ,
     "faiss_hnsw": FaissHNSW,
     "faiss_ivfpq": FaissIVFPQ,
 }
@@ -319,11 +373,15 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
         "engines": [],
     }
     out["system"]["numba_threading_layer"] = _threading_layer()
-    for spec in cfg["engines"]:
+    built = []
+    for spec in cfg["engines"]:  # build everything first: fail fast, measure later
         eng = ENGINES[spec["kind"]](spec, ds, cfg["dataset"])
         print(f"[{eng.name}] building...", flush=True)
         meta = eng.build(bool(cfg.get("rebuild", False)))
         print(f"[{eng.name}] build {meta['build_s']:.1f}s, {meta['index_bytes'] / 2**20:.0f} MiB")
+        eng.batch(Q[:32], k, spec["sweep"][0])  # smoke-test the search path too
+        built.append((spec, eng, meta))
+    for spec, eng, meta in built:
         points = []
         for p in spec["sweep"]:
             pt = measure_point(eng, Q, gt, k, p, cfg["warmup"], cfg["runs"], cfg["latency_queries"])
@@ -389,6 +447,6 @@ def plot(
     ax.set_xlabel(f"recall@{k}")
     ax.set_ylabel(f"queries / second ({out['system']['threads']} threads, log scale)")
     ax.set_title(title, loc="left", fontsize=11)
-    ax.legend(frameon=False, loc="lower left", labelcolor=INK2)
+    ax.legend(frameon=False, loc="best", labelcolor=INK2)
     ax.set_ylim(top=ax.get_ylim()[1] * 1.3)
     save_figure(fig, name)
