@@ -124,3 +124,22 @@ def test_upserts_in_many_small_batches(tmp_path, small_data):
     for i in (0, 36, 37, 300, 599):
         assert c.search(small_data[i], k=1).ids == [f"v{i}"]
     c.close()
+
+
+def test_hnsw_pq_collection(tmp_path, small_data):
+    over = {"index": "hnsw_pq", "pq.m": 8, "pq.train_size": 1000, "pq.kmeans_iters": 8}
+    c = Collection.create(tmp_path / "pq", "pq", dim=32, overrides=over)
+    ids = [f"v{i}" for i in range(len(small_data))]
+    c.upsert(ids[:600], small_data[:600])
+    assert c.search(small_data[5], k=1).strategy == "hnsw"  # not trained yet
+    c.upsert(ids[600:], small_data[600:])  # crosses train_size -> trains + encodes all
+    res = c.search(small_data[1500], k=5)
+    assert res.strategy == "hnsw_pq" and res.ids[0] == "v1500"
+    assert res.distances[0] == 0.0  # re-rank distances are exact
+    stats = c.stats()
+    # float vectors stay on disk; the in-memory index is graph + codebooks + codes
+    assert stats["index_bytes"] == c.hnsw.nbytes() + c.pq.nbytes() + c.n * 8
+    c.close()
+    c2 = Collection.open(tmp_path / "pq")
+    assert c2.search(small_data[1500], k=1).ids == ["v1500"]
+    c2.close()

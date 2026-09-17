@@ -35,6 +35,7 @@ from engine.config import apply_dotted, default_config
 from index.distance import normalize
 from index.flat import search_flat
 from index.hnsw import HNSWIndex
+from index.pq import ProductQuantizer
 from storage.meta import AttrValue, MetaStore
 from storage.vectors import VectorStore
 
@@ -79,6 +80,12 @@ class Collection:
         self.hnsw: HNSWIndex | None = None
         if self.index_type in ("hnsw", "hnsw_pq"):
             self.hnsw = HNSWIndex.from_config(self.dim, cfg, capacity=cap)
+        # PQ state is published as one (codebooks, codes) tuple so a reader never
+        # sees trained codebooks next to not-yet-encoded codes.
+        self.pq: ProductQuantizer | None = None
+        self._pq_view: tuple[np.ndarray, np.ndarray] | None = None
+        if self.index_type == "hnsw_pq":
+            self.pq = ProductQuantizer.from_config(self.dim, cfg)
 
     # ---- lifecycle --------------------------------------------------------
 
@@ -123,6 +130,8 @@ class Collection:
             if u is None:
                 self.deleted[i] = 1
         self.n_deleted = int(self.deleted[:n].sum())
+        if self.pq is not None and n >= int(self.cfg["pq"]["train_size"]):
+            self._train_pq(n)  # seeded, so this reproduces the original codebooks
         if self.hnsw is not None:
             self.hnsw.add(self.store.array, n)
         self.n = n
@@ -184,6 +193,7 @@ class Collection:
         # Vector first, then metadata, then graph edges: by the time any edge
         # points at a new node, everything a reader could fetch for it exists.
         self.store.write(new_ids, vecs)
+        self._encode(new_ids, vecs, end)
         self.meta.apply_upsert(new_ids, ids, attrs, replaced)
         self._tombstone(replaced)
         if self.hnsw is not None:
@@ -219,8 +229,39 @@ class Collection:
             grown = np.zeros(cap, dtype=np.uint8)
             grown[: self.deleted.shape[0]] = self.deleted
             self.deleted = grown
+        if self._pq_view is not None and rows > self._pq_view[1].shape[0]:
+            codebooks, codes = self._pq_view
+            grown = np.zeros((self.store.capacity, codes.shape[1]), dtype=np.uint8)
+            grown[: codes.shape[0]] = codes
+            self._pq_view = (codebooks, grown)
         if self.hnsw is not None:
             self.hnsw.ensure_capacity(rows)
+
+    # ---- product quantization -------------------------------------------------
+
+    def _encode(self, new_ids: np.ndarray, vecs: np.ndarray, end: int) -> None:
+        if self.pq is None:
+            return
+        if self._pq_view is not None:
+            self._pq_view[1][new_ids] = self.pq.encode(vecs)
+        elif end >= int(self.cfg["pq"]["train_size"]):
+            self._train_pq(end)
+
+    def _train_pq(self, end: int) -> None:
+        """One-off: train codebooks on a seeded sample of live vectors, encode all.
+
+        Runs inside the writer (blocking writes, not reads) the first time the
+        collection reaches ``pq.train_size`` vectors."""
+        alive = np.flatnonzero(self.deleted[:end] == 0)
+        size = min(int(self.cfg["pq"]["train_size"]), alive.size)
+        rng = np.random.default_rng(int(self.cfg["pq"]["seed"]))
+        vecs = self.store.array
+        pq = ProductQuantizer.from_config(self.dim, self.cfg)
+        pq.train(vecs[np.sort(rng.choice(alive, size, replace=False))])
+        codes = np.zeros((self.store.capacity, pq.m), dtype=np.uint8)
+        codes[:end] = pq.encode(vecs[:end])
+        self.pq = pq
+        self._pq_view = (pq.codebooks, codes)
 
     # ---- reads ------------------------------------------------------------
 
@@ -241,13 +282,23 @@ class Collection:
             raise InvalidArgument("filtered search is not supported yet")
         # Capture order: graph, then count, vectors and tombstones (see _ensure_capacity).
         g = self.hnsw.g if self.hnsw is not None else None
+        pqv = self._pq_view
         n, vecs, deleted = self.n, self.store.array, self.deleted
         if g is None:
             internal, dists = search_flat(vecs, n, q, k, deleted)
             return self._result(internal, dists, "flat", 0, 1.0, include_attributes)
         ef = int(ef or self.cfg["hnsw"]["ef_search"])
+        if pqv is not None:
+            internal, dists, st = self.hnsw.search_pq(
+                vecs, pqv[0], pqv[1], q, k, ef, self._rerank_depth(k, ef), deleted, g=g
+            )
+            return self._result(internal, dists, "hnsw_pq", ef, 1.0, include_attributes, st)
         internal, dists, st = self.hnsw.search(vecs, q, k, ef, deleted, g=g)
         return self._result(internal, dists, "hnsw", ef, 1.0, include_attributes, st)
+
+    def _rerank_depth(self, k: int, ef: int) -> int:
+        p = self.cfg["pq"]
+        return max(k, min(int(p["rerank_max"]), int(p["rerank_factor"]) * ef))
 
     def _result(
         self,
@@ -287,5 +338,10 @@ class Collection:
         }
 
     def index_bytes(self) -> int:
+        """Bytes of the in-memory search structure. In hnsw_pq mode, once trained,
+        full vectors stay on disk (memmap) and are read only to re-rank."""
         graph = self.hnsw.nbytes() if self.hnsw is not None else 0
+        pqv = self._pq_view
+        if pqv is not None:
+            return graph + int(pqv[0].nbytes) + self.n * pqv[1].shape[1]
         return self.store.nbytes(self.n) + graph
