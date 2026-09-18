@@ -30,6 +30,7 @@ planner:
   post_filter_min_selectivity: 0.5    # at or above: plain HNSW + post-filter
   post_filter_max_ef: 1024
   mask_cache_size: 64
+  exact_selectivity_below: 50000     # count matches exactly instead of estimating
   stats_refresh_fraction: 0.1         # re-analyse attributes after this much churn
 
 early_stop:

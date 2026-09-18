@@ -32,8 +32,10 @@ from typing import Any
 import numpy as np
 
 from engine.config import apply_dotted, default_config
+from engine.filters import FilterError, evaluate, parse
+from engine.planner import Plan, Planner
 from index.distance import normalize
-from index.flat import search_flat
+from index.flat import search_flat, search_subset
 from index.hnsw import HNSWIndex
 from index.pq import ProductQuantizer
 from storage.meta import AttrValue, MetaStore
@@ -77,6 +79,9 @@ class Collection:
         self.deleted = np.zeros(cap, dtype=np.uint8)
         self.n = 0  # published count of internal ids (readers only look below it)
         self.n_deleted = 0
+        self.version = 0  # bumped by every write; keys the planner's bitmap cache
+        self.planner = Planner(cfg)
+        self._churn = 0  # writes since attribute statistics were last refreshed
         self.hnsw: HNSWIndex | None = None
         if self.index_type in ("hnsw", "hnsw_pq"):
             self.hnsw = HNSWIndex.from_config(self.dim, cfg, capacity=cap)
@@ -178,6 +183,7 @@ class Collection:
                 raise InvalidArgument(str(e)) from e
             new_ids, replaced = self.meta.plan_upsert(ids)
             self._apply_upsert(new_ids, ids, vecs, attrs, replaced)
+            self._after_write(len(ids))
         return len(ids)
 
     def _apply_upsert(
@@ -205,7 +211,16 @@ class Collection:
             internal = self.meta.lookup([str(u) for u in ids])
             if internal.size:
                 self._apply_delete(internal)
+                self._after_write(int(internal.size))
             return int(internal.size)
+
+    def _after_write(self, count: int) -> None:
+        self.version += 1
+        self._churn += count
+        frac = float(self.cfg["planner"]["stats_refresh_fraction"])
+        if self._churn >= frac * max(self.n, 1) and self.meta.columns:
+            self.meta.refresh_stats()
+            self._churn = 0
 
     def _apply_delete(self, internal: np.ndarray) -> None:
         self.meta.apply_delete(internal)
@@ -272,29 +287,81 @@ class Collection:
         filter: str | None = None,
         ef: int | None = None,
         include_attributes: bool = False,
+        strategy: str | None = None,
     ) -> SearchResult:
+        """Top-k search. ``strategy`` forces a filter strategy (tests, benchmarks)."""
         q = self._prepare_vectors(vector)[0]
         if k <= 0:
             raise InvalidArgument("k must be positive")
         if ef is not None and ef <= 0:
             raise InvalidArgument("ef must be positive")
+        node = None
         if filter:
-            raise InvalidArgument("filtered search is not supported yet")
-        # Capture order: graph, then count, vectors and tombstones (see _ensure_capacity).
+            try:
+                node = parse(filter)
+            except FilterError as e:
+                raise InvalidArgument(f"bad filter: {e}") from e
+        # Capture order: graph, then PQ view, count, vectors, tombstones, version
+        # (see _ensure_capacity for why the graph must come first).
         g = self.hnsw.g if self.hnsw is not None else None
         pqv = self._pq_view
-        n, vecs, deleted = self.n, self.store.array, self.deleted
-        if g is None:
-            internal, dists = search_flat(vecs, n, q, k, deleted)
-            return self._result(internal, dists, "flat", 0, 1.0, include_attributes)
+        n, vecs, deleted, version = self.n, self.store.array, self.deleted, self.version
         ef = int(ef or self.cfg["hnsw"]["ef_search"])
-        if pqv is not None:
-            internal, dists, st = self.hnsw.search_pq(
-                vecs, pqv[0], pqv[1], q, k, ef, self._rerank_depth(k, ef), deleted, g=g
+
+        if node is None:
+            if g is None:
+                internal, dists = search_flat(vecs, n, q, k, deleted)
+                return self._result(internal, dists, "flat", 0, 1.0, include_attributes)
+            internal, dists, st = self._graph(g, pqv, vecs, deleted, q, k, ef, None)
+            base = "hnsw_pq" if pqv is not None else "hnsw"
+            return self._result(internal, dists, base, ef, 1.0, include_attributes, st)
+        try:
+            return self._filtered(
+                node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, include_attributes
             )
-            return self._result(internal, dists, "hnsw_pq", ef, 1.0, include_attributes, st)
-        internal, dists, st = self.hnsw.search(vecs, q, k, ef, deleted, g=g)
-        return self._result(internal, dists, "hnsw", ef, 1.0, include_attributes, st)
+        except FilterError as e:
+            raise InvalidArgument(f"bad filter: {e}") from e
+
+    def _filtered(self, node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, attrs):
+        force = "brute_force" if g is None else strategy
+        try:
+            plan = self.planner.plan(node, self.meta, n, version, force)
+        except ValueError as e:
+            if isinstance(e, FilterError):
+                raise
+            raise InvalidArgument(str(e)) from e
+        if plan.strategy == "brute_force":
+            ids = np.flatnonzero(plan.mask[:n] & (deleted[:n] == 0))
+            internal, dists = search_subset(vecs, ids, q, k)
+            st = {"candidates": int(ids.size)}
+            return self._result(internal, dists, "brute_force", 0, plan.selectivity, attrs, st)
+        if plan.strategy == "bitmap":
+            return self._bitmap(plan, g, pqv, vecs, deleted, q, k, ef, n, attrs)
+        fetch, ef_post = self.planner.post_filter_fetch(k, ef, plan.selectivity)
+        internal, dists, st = self._graph(g, pqv, vecs, deleted, q, fetch, ef_post, None)
+        keep = evaluate(node, self.meta.columns, internal.astype(np.int64))
+        internal, dists = internal[keep][:k], dists[keep][:k]
+        if internal.shape[0] < k and strategy is None:
+            # Too few survived (the estimate was optimistic): redo with a bitmap.
+            plan.mask = self.planner.mask(node, self.meta, n, version)
+            res = self._bitmap(plan, g, pqv, vecs, deleted, q, k, ef, n, attrs)
+            res.strategy = "post_filter+bitmap"
+            return res
+        return self._result(internal, dists, "post_filter", ef_post, plan.selectivity, attrs, st)
+
+    def _graph(self, g, pqv, vecs, deleted, q, k, ef, mask):
+        if pqv is not None:
+            depth = self._rerank_depth(k, ef)
+            return self.hnsw.search_pq(vecs, pqv[0], pqv[1], q, k, ef, depth, deleted, mask, g=g)
+        return self.hnsw.search(vecs, q, k, ef, deleted, mask, g=g)
+
+    def _bitmap(self, plan: Plan, g, pqv, vecs, deleted, q, k, ef, n, attrs):
+        # The graph may already link ids >= n (published after we read n), so the
+        # bitmap spans the graph's whole capacity; ids we know nothing about stay False.
+        mask = np.zeros(g.capacity, dtype=np.bool_)
+        mask[:n] = plan.mask[:n]
+        internal, dists, st = self._graph(g, pqv, vecs, deleted, q, k, ef, mask)
+        return self._result(internal, dists, "bitmap", ef, plan.selectivity, attrs, st)
 
     def _rerank_depth(self, k: int, ef: int) -> int:
         p = self.cfg["pq"]

@@ -114,12 +114,17 @@ class Column:
             }
         present = col[~np.isnan(col)]
         qs = np.quantile(present, np.linspace(0, 1, 101)).tolist() if present.size else []
-        return {
+        uniq, counts = np.unique(present, return_counts=True)
+        out = {
             "kind": self.kind,
             "n": int(n),
             "null_frac": float(1 - present.size / max(n, 1)),
             "quantiles": qs,
+            "n_distinct": int(uniq.size),
         }
+        if uniq.size <= 256:  # low-cardinality: exact value frequencies
+            out["freq"] = {repr(float(u)): int(c) for u, c in zip(uniq, counts, strict=True)}
+        return out
 
 
 class MetaStore:
