@@ -40,7 +40,7 @@ early_stop:
 
 durability:
   fsync: true
-  snapshot_every: 200000  # WAL records between automatic snapshots (0 disables)
+  snapshot_every: 200000  # rows written between automatic snapshots (0 disables)
 
 server:
   host: 127.0.0.1

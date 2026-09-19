@@ -1,0 +1,6 @@
+# Crash-recovery acceptance: hard-kill a writer at random points, recover, verify.
+#   python -m bench.run configs/bench/crash.yaml
+experiment: crash
+runs: 100
+seed: 0          # run r uses seed r: kill point, snapshot cadence, workload
+max_acks: 150    # kill after a random number (0..max_acks) of acknowledged writes

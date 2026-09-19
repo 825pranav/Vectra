@@ -24,6 +24,7 @@ linearly with the gRPC thread pool because Numba kernels release the GIL.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,6 +41,9 @@ from index.hnsw import HNSWIndex
 from index.pq import ProductQuantizer
 from storage.meta import AttrValue, MetaStore
 from storage.vectors import VectorStore
+from storage.wal import Delete, Snapshots, WriteAheadLog, encode_delete, encode_upsert
+
+_ATTR_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class CollectionError(Exception):
@@ -91,6 +95,12 @@ class Collection:
         self._pq_view: tuple[np.ndarray, np.ndarray] | None = None
         if self.index_type == "hnsw_pq":
             self.pq = ProductQuantizer.from_config(self.dim, cfg)
+        dur = cfg["durability"]
+        self.wal = WriteAheadLog(self.path / "wal", fsync=bool(dur["fsync"]))
+        self.snapshots = Snapshots(self.path / "snapshots")
+        self.snapshot_every = int(dur["snapshot_every"])
+        self.lsn = 0  # last log sequence number applied
+        self._since_snapshot = 0  # rows written since the last snapshot
 
     # ---- lifecycle --------------------------------------------------------
 
@@ -117,6 +127,7 @@ class Collection:
         (path / cls.CONFIG_FILE).write_text(json.dumps(cfg, indent=2))
         col = cls(path, cfg)
         col.meta.put_config(cfg)
+        col.wal.start(1)
         return col
 
     @classmethod
@@ -128,21 +139,92 @@ class Collection:
         return col
 
     def _recover(self) -> None:
-        self.meta.load_from_sqlite()
-        n = self.meta.count
-        self._ensure_capacity(n)
-        for i, u in enumerate(self.meta.internal_to_user):
-            if u is None:
-                self.deleted[i] = 1
-        self.n_deleted = int(self.deleted[:n].sum())
-        if self.pq is not None and n >= int(self.cfg["pq"]["train_size"]):
-            self._train_pq(n)  # seeded, so this reproduces the original codebooks
+        """Newest complete snapshot + replay of every WAL record after it.
+
+        Replay goes through the same ``_apply_*`` functions as live writes. They
+        are idempotent against SQLite and the vector file (both may already hold
+        records newer than the snapshot), while the in-memory state restored
+        from the snapshot is exactly as old as the snapshot's LSN."""
+        cur = self.snapshots.current()
+        if cur is not None:
+            self._restore(*Snapshots.load(cur[1]))
+        for rec in self.wal.replay(self.lsn):
+            if isinstance(rec, Delete):
+                self._apply_delete(rec.internal_ids)
+                count = int(rec.internal_ids.size)
+            else:
+                self._apply_upsert(
+                    rec.internal_ids, rec.user_ids, rec.vectors, rec.attrs, rec.replaced
+                )
+                count = int(rec.internal_ids.size)
+            self.lsn = rec.lsn
+            self.version += 1
+            self._since_snapshot += count
+        self.wal.start(self.lsn + 1)
+        if self.meta.columns:
+            self.meta.refresh_stats()
+
+    def _restore(self, arrays: dict[str, np.ndarray], info: dict[str, Any]) -> None:
+        n = int(info["n"])
+        self._ensure_capacity(max(n, 1))
+        self.meta.restore_state(
+            {
+                "arrays": {k: v for k, v in arrays.items() if k.startswith("col.")},
+                "users": arrays["users"],
+                "alive": arrays["alive"],
+                "info": info["meta"],
+            }
+        )
+        self.deleted[:n] = arrays["deleted"]
+        self.n_deleted = int(info["n_deleted"])
         if self.hnsw is not None:
-            self.hnsw.add(self.store.array, n)
+            self.hnsw.load_state({k[6:]: v for k, v in arrays.items() if k.startswith("graph.")})
+        if self.pq is not None and "pq.codebooks" in arrays:
+            self.pq.codebooks = arrays["pq.codebooks"]
+            codes = np.zeros((self.store.capacity, self.pq.m), dtype=np.uint8)
+            codes[:n] = arrays["pq.codes"]
+            self._pq_view = (self.pq.codebooks, codes)
         self.n = n
+        self.lsn = int(info["lsn"])
+        self.version = int(info["version"])
+
+    def snapshot(self) -> int:
+        """Persist in-memory state and truncate the WAL. Returns the snapshot LSN."""
+        with self._lock:
+            self._snapshot()
+            return self.lsn
+
+    def _snapshot(self) -> None:
+        n = self.n
+        self.store.flush()  # vectors [0, n) must be durable before the WAL is cut
+        ms = self.meta.snapshot_state()
+        arrays: dict[str, np.ndarray] = {
+            "deleted": self.deleted[:n].copy(),
+            "users": ms["users"],
+            "alive": ms["alive"],
+            **ms["arrays"],
+        }
+        if self.hnsw is not None:
+            arrays.update({f"graph.{k}": v for k, v in self.hnsw.state().items()})
+        if self._pq_view is not None:
+            arrays["pq.codebooks"] = self._pq_view[0]
+            arrays["pq.codes"] = self._pq_view[1][:n]
+        info = {
+            "lsn": self.lsn,
+            "n": n,
+            "n_deleted": self.n_deleted,
+            "version": self.version,
+            "meta": ms["info"],
+        }
+        self.snapshots.write(self.lsn, arrays, info)
+        self.wal.rotate(self.lsn)
+        self._since_snapshot = 0
 
     def close(self) -> None:
         with self._lock:
+            if self._since_snapshot:
+                self._snapshot()  # next open skips the replay
+            self.wal.close()
             self.store.close()
             self.meta.close()
 
@@ -176,13 +258,21 @@ class Collection:
             raise InvalidArgument("ids and attributes have different lengths")
         if not ids:
             return 0
+        for rec in attrs:
+            for key in rec:
+                if not _ATTR_KEY.match(key):
+                    raise InvalidArgument(f"invalid attribute name {key!r}")
         with self._lock:
             try:
                 self.meta.check_kinds(attrs)
             except (TypeError, ValueError) as e:
                 raise InvalidArgument(str(e)) from e
             new_ids, replaced = self.meta.plan_upsert(ids)
+            lsn = self.lsn + 1
+            # Durable before applied, applied before acknowledged.
+            self.wal.append(encode_upsert(lsn, new_ids, replaced, vecs, ids, attrs))
             self._apply_upsert(new_ids, ids, vecs, attrs, replaced)
+            self.lsn = lsn
             self._after_write(len(ids))
         return len(ids)
 
@@ -210,7 +300,10 @@ class Collection:
         with self._lock:
             internal = self.meta.lookup([str(u) for u in ids])
             if internal.size:
+                lsn = self.lsn + 1
+                self.wal.append(encode_delete(lsn, internal))
                 self._apply_delete(internal)
+                self.lsn = lsn
                 self._after_write(int(internal.size))
             return int(internal.size)
 
@@ -221,6 +314,9 @@ class Collection:
         if self._churn >= frac * max(self.n, 1) and self.meta.columns:
             self.meta.refresh_stats()
             self._churn = 0
+        self._since_snapshot += count
+        if self.snapshot_every and self._since_snapshot >= self.snapshot_every:
+            self._snapshot()
 
     def _apply_delete(self, internal: np.ndarray) -> None:
         self.meta.apply_delete(internal)
@@ -401,7 +497,7 @@ class Collection:
             "count": self.n - self.n_deleted,
             "deleted": self.n_deleted,
             "index_bytes": self.index_bytes(),
-            "lsn": 0,
+            "lsn": self.lsn,
         }
 
     def index_bytes(self) -> int:

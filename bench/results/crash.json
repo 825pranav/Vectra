@@ -1,0 +1,1046 @@
+{
+  "experiment": "crash",
+  "config": {
+    "experiment": "crash",
+    "runs": 100,
+    "seed": 0,
+    "max_acks": 150
+  },
+  "system": {
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13500HX",
+    "ram_gb": 31.7,
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14",
+    "numpy": "2.5.3",
+    "numba": "0.67.0",
+    "numba_threading_layer": null,
+    "threads": 1,
+    "faiss": "1.15.1"
+  },
+  "passed": 100,
+  "runs": 100,
+  "seconds": 153.36658319999697,
+  "total_acked_records": 132553,
+  "results": [
+    {
+      "ok": true,
+      "seed": 0,
+      "acks": 107,
+      "acked_records": 1838,
+      "recovered_records": 1793,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 1,
+      "acks": 146,
+      "acked_records": 2615,
+      "recovered_records": 2560,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 2,
+      "acks": 23,
+      "acked_records": 399,
+      "recovered_records": 421,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 3,
+      "acks": 140,
+      "acked_records": 2327,
+      "recovered_records": 2281,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 4,
+      "acks": 79,
+      "acked_records": 1330,
+      "recovered_records": 1327,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 5,
+      "acks": 81,
+      "acked_records": 1358,
+      "recovered_records": 1354,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 6,
+      "acks": 24,
+      "acked_records": 405,
+      "recovered_records": 417,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 7,
+      "acks": 41,
+      "acked_records": 729,
+      "recovered_records": 735,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 8,
+      "acks": 97,
+      "acked_records": 1634,
+      "recovered_records": 1618,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 9,
+      "acks": 102,
+      "acked_records": 1816,
+      "recovered_records": 1769,
+      "snapshot_every": 200,
+      "in_flight_delete": [
+        452,
+        766,
+        1377
+      ],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 10,
+      "acks": 12,
+      "acked_records": 247,
+      "recovered_records": 254,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 11,
+      "acks": 146,
+      "acked_records": 2231,
+      "recovered_records": 2178,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 12,
+      "acks": 68,
+      "acked_records": 1231,
+      "recovered_records": 1210,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 13,
+      "acks": 74,
+      "acked_records": 1403,
+      "recovered_records": 1381,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 14,
+      "acks": 137,
+      "acked_records": 2306,
+      "recovered_records": 2260,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 15,
+      "acks": 7,
+      "acked_records": 100,
+      "recovered_records": 136,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 16,
+      "acks": 126,
+      "acked_records": 2008,
+      "recovered_records": 1986,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 17,
+      "acks": 111,
+      "acked_records": 1957,
+      "recovered_records": 1947,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 18,
+      "acks": 33,
+      "acked_records": 571,
+      "recovered_records": 556,
+      "snapshot_every": 50,
+      "in_flight_delete": [
+        29,
+        76,
+        395
+      ],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 19,
+      "acks": 16,
+      "acked_records": 380,
+      "recovered_records": 400,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 20,
+      "acks": 41,
+      "acked_records": 612,
+      "recovered_records": 580,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 21,
+      "acks": 107,
+      "acked_records": 1877,
+      "recovered_records": 1828,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 22,
+      "acks": 63,
+      "acked_records": 1122,
+      "recovered_records": 1118,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 23,
+      "acks": 21,
+      "acked_records": 333,
+      "recovered_records": 354,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 24,
+      "acks": 111,
+      "acked_records": 1930,
+      "recovered_records": 1904,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 25,
+      "acks": 5,
+      "acked_records": 42,
+      "recovered_records": 75,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 26,
+      "acks": 54,
+      "acked_records": 965,
+      "recovered_records": 973,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 27,
+      "acks": 131,
+      "acked_records": 2129,
+      "recovered_records": 2071,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 28,
+      "acks": 36,
+      "acked_records": 697,
+      "recovered_records": 676,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 29,
+      "acks": 20,
+      "acked_records": 353,
+      "recovered_records": 386,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 30,
+      "acks": 84,
+      "acked_records": 1307,
+      "recovered_records": 1304,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 31,
+      "acks": 122,
+      "acked_records": 2102,
+      "recovered_records": 2062,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 32,
+      "acks": 55,
+      "acked_records": 905,
+      "recovered_records": 904,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 33,
+      "acks": 44,
+      "acked_records": 836,
+      "recovered_records": 851,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 34,
+      "acks": 100,
+      "acked_records": 1598,
+      "recovered_records": 1573,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 35,
+      "acks": 95,
+      "acked_records": 1412,
+      "recovered_records": 1368,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 36,
+      "acks": 15,
+      "acked_records": 218,
+      "recovered_records": 248,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 37,
+      "acks": 30,
+      "acked_records": 436,
+      "recovered_records": 457,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 38,
+      "acks": 117,
+      "acked_records": 1927,
+      "recovered_records": 1867,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 39,
+      "acks": 69,
+      "acked_records": 1199,
+      "recovered_records": 1205,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 40,
+      "acks": 158,
+      "acked_records": 2636,
+      "recovered_records": 2588,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 41,
+      "acks": 90,
+      "acked_records": 1475,
+      "recovered_records": 1444,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 42,
+      "acks": 28,
+      "acked_records": 471,
+      "recovered_records": 466,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 43,
+      "acks": 73,
+      "acked_records": 1464,
+      "recovered_records": 1469,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 44,
+      "acks": 133,
+      "acked_records": 2221,
+      "recovered_records": 2183,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 45,
+      "acks": 106,
+      "acked_records": 1814,
+      "recovered_records": 1802,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 46,
+      "acks": 103,
+      "acked_records": 1704,
+      "recovered_records": 1648,
+      "snapshot_every": 50,
+      "in_flight_delete": [
+        402,
+        929,
+        1295
+      ],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 47,
+      "acks": 16,
+      "acked_records": 226,
+      "recovered_records": 251,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 48,
+      "acks": 83,
+      "acked_records": 1425,
+      "recovered_records": 1394,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 49,
+      "acks": 89,
+      "acked_records": 1472,
+      "recovered_records": 1461,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 50,
+      "acks": 70,
+      "acked_records": 1180,
+      "recovered_records": 1182,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 51,
+      "acks": 129,
+      "acked_records": 1932,
+      "recovered_records": 1873,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 52,
+      "acks": 22,
+      "acked_records": 392,
+      "recovered_records": 411,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 53,
+      "acks": 57,
+      "acked_records": 1015,
+      "recovered_records": 997,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 54,
+      "acks": 113,
+      "acked_records": 1833,
+      "recovered_records": 1808,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 55,
+      "acks": 51,
+      "acked_records": 916,
+      "recovered_records": 918,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 56,
+      "acks": 6,
+      "acked_records": 96,
+      "recovered_records": 132,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 57,
+      "acks": 97,
+      "acked_records": 1715,
+      "recovered_records": 1704,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 58,
+      "acks": 51,
+      "acked_records": 970,
+      "recovered_records": 955,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 59,
+      "acks": 23,
+      "acked_records": 360,
+      "recovered_records": 379,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 60,
+      "acks": 79,
+      "acked_records": 1262,
+      "recovered_records": 1242,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 61,
+      "acks": 50,
+      "acked_records": 854,
+      "recovered_records": 855,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 62,
+      "acks": 44,
+      "acked_records": 818,
+      "recovered_records": 817,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 63,
+      "acks": 119,
+      "acked_records": 1845,
+      "recovered_records": 1786,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 64,
+      "acks": 36,
+      "acked_records": 597,
+      "recovered_records": 603,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 65,
+      "acks": 77,
+      "acked_records": 1354,
+      "recovered_records": 1328,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 66,
+      "acks": 80,
+      "acked_records": 1440,
+      "recovered_records": 1446,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 67,
+      "acks": 30,
+      "acked_records": 480,
+      "recovered_records": 488,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 68,
+      "acks": 125,
+      "acked_records": 2038,
+      "recovered_records": 1984,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 69,
+      "acks": 9,
+      "acked_records": 184,
+      "recovered_records": 212,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 70,
+      "acks": 77,
+      "acked_records": 1278,
+      "recovered_records": 1251,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 71,
+      "acks": 133,
+      "acked_records": 1983,
+      "recovered_records": 1941,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 72,
+      "acks": 47,
+      "acked_records": 707,
+      "recovered_records": 718,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 73,
+      "acks": 32,
+      "acked_records": 491,
+      "recovered_records": 504,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 74,
+      "acks": 144,
+      "acked_records": 2537,
+      "recovered_records": 2464,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 75,
+      "acks": 154,
+      "acked_records": 2673,
+      "recovered_records": 2634,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 76,
+      "acks": 123,
+      "acked_records": 2064,
+      "recovered_records": 2016,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 77,
+      "acks": 86,
+      "acked_records": 1390,
+      "recovered_records": 1363,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 78,
+      "acks": 24,
+      "acked_records": 481,
+      "recovered_records": 499,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 79,
+      "acks": 112,
+      "acked_records": 1866,
+      "recovered_records": 1819,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 80,
+      "acks": 103,
+      "acked_records": 1804,
+      "recovered_records": 1788,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 81,
+      "acks": 124,
+      "acked_records": 1721,
+      "recovered_records": 1669,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 82,
+      "acks": 130,
+      "acked_records": 2168,
+      "recovered_records": 2134,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 83,
+      "acks": 118,
+      "acked_records": 1909,
+      "recovered_records": 1889,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 84,
+      "acks": 80,
+      "acked_records": 1676,
+      "recovered_records": 1686,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 85,
+      "acks": 29,
+      "acked_records": 485,
+      "recovered_records": 483,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 86,
+      "acks": 146,
+      "acked_records": 2363,
+      "recovered_records": 2307,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 87,
+      "acks": 49,
+      "acked_records": 733,
+      "recovered_records": 724,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 88,
+      "acks": 50,
+      "acked_records": 708,
+      "recovered_records": 712,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 89,
+      "acks": 67,
+      "acked_records": 1121,
+      "recovered_records": 1121,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 90,
+      "acks": 23,
+      "acked_records": 315,
+      "recovered_records": 315,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 91,
+      "acks": 45,
+      "acked_records": 830,
+      "recovered_records": 844,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 92,
+      "acks": 137,
+      "acked_records": 2520,
+      "recovered_records": 2485,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 93,
+      "acks": 151,
+      "acked_records": 2628,
+      "recovered_records": 2554,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 94,
+      "acks": 46,
+      "acked_records": 861,
+      "recovered_records": 875,
+      "snapshot_every": 1000,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 95,
+      "acks": 139,
+      "acked_records": 2493,
+      "recovered_records": 2418,
+      "snapshot_every": 1000,
+      "in_flight_delete": [
+        556,
+        1882,
+        1891
+      ],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 96,
+      "acks": 84,
+      "acked_records": 1421,
+      "recovered_records": 1396,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 97,
+      "acks": 110,
+      "acked_records": 1847,
+      "recovered_records": 1835,
+      "snapshot_every": 50,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 98,
+      "acks": 153,
+      "acked_records": 2629,
+      "recovered_records": 2547,
+      "snapshot_every": 200,
+      "in_flight_delete": [],
+      "problems": []
+    },
+    {
+      "ok": true,
+      "seed": 99,
+      "acks": 99,
+      "acked_records": 1777,
+      "recovered_records": 1744,
+      "snapshot_every": 200,
+      "in_flight_delete": [
+        108,
+        430,
+        1332
+      ],
+      "problems": []
+    }
+  ]
+}

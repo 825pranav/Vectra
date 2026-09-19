@@ -11,6 +11,7 @@ until they drop it, so growth never blocks or invalidates in-flight searches
 from __future__ import annotations
 
 import contextlib
+import os
 import re
 from pathlib import Path
 
@@ -27,6 +28,9 @@ class VectorStore:
         gens = sorted(
             (int(m.group(1)), p) for p in self.dir.iterdir() if (m := _GEN_RE.match(p.name))
         )
+        for tmp in self.dir.glob("vectors.*.tmp"):  # growth interrupted by a crash
+            with contextlib.suppress(OSError):
+                tmp.unlink()
         if gens:
             self._gen, path = gens[-1]
             rows = path.stat().st_size // (4 * self.dim)
@@ -60,10 +64,22 @@ class VectorStore:
         new_rows = self.capacity
         while new_rows < rows:
             new_rows *= 2
+        # Build the next generation under a temporary name and rename it only once
+        # it is complete and fsynced: open() trusts the highest-numbered file, so
+        # a half-copied file must never carry a final name. (Plain writes, not a
+        # memmap: Windows cannot rename a file while it is mapped.)
         new_path = self._path(self._gen + 1)
-        new_mm = self._create(new_path, new_rows)
-        new_mm[: self.capacity] = self._mm
-        new_mm.flush()
+        tmp = new_path.with_suffix(".tmp")
+        old = np.asarray(self._mm)
+        with open(tmp, "wb") as f:
+            step = max(1, (64 << 20) // (4 * self.dim))
+            for s in range(0, old.shape[0], step):
+                f.write(old[s : s + step].tobytes())
+            f.truncate(new_rows * self.dim * 4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, new_path)
+        new_mm = np.memmap(new_path, dtype=np.float32, mode="r+", shape=(new_rows, self.dim))
         self._stale.append(self._path(self._gen))
         self._gen += 1
         self._mm = new_mm

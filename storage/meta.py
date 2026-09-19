@@ -294,27 +294,6 @@ class MetaStore:
 
     # ---- load / snapshot --------------------------------------------------
 
-    def load_from_sqlite(self) -> None:
-        """Rebuild all in-memory state from SQLite (used when no snapshot exists)."""
-        rows = self.db.execute("SELECT internal_id, user_id, alive FROM ids ORDER BY internal_id")
-        self.internal_to_user = []
-        self.user_to_internal = {}
-        for i, u, alive in rows:
-            if i >= len(self.internal_to_user):
-                self.internal_to_user.extend([None] * (i + 1 - len(self.internal_to_user)))
-            if alive:
-                self.internal_to_user[i] = u
-                self.user_to_internal[u] = i
-        self._ensure(max(self.count, 1))
-        kinds = dict(self.db.execute("SELECT key, kind FROM attr_kinds"))
-        self.columns = {k: Column(kind, self.capacity) for k, kind in kinds.items()}
-        for i, key, num, txt in self.db.execute("SELECT internal_id, key, num, txt FROM attrs"):
-            col = self.columns[key]
-            col.set(i, txt if col.kind == "str" else num)
-        self.stats = {
-            k: json.loads(s) for k, s in self.db.execute("SELECT key, stats FROM attr_stats")
-        }
-
     def snapshot_state(self) -> dict[str, Any]:
         """Arrays + small JSON needed to restore in-memory state without SQLite scans."""
         arrays = {f"col.{k}": c.data[: self.count] for k, c in self.columns.items()}

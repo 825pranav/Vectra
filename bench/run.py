@@ -13,6 +13,7 @@ from engine.config import load_yaml
 
 EXPERIMENTS = {
     "ann_curves": "bench.ann",
+    "crash": "bench.crash",
 }
 
 
