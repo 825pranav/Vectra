@@ -420,8 +420,9 @@ class Collection:
 
     def _filtered(self, node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, attrs):
         force = "brute_force" if g is None else strategy
+        cap = 0 if g is None else g.capacity
         try:
-            plan = self.planner.plan(node, self.meta, n, version, force)
+            plan = self.planner.plan(node, self.meta, n, version, force, cap)
         except ValueError as e:
             if isinstance(e, FilterError):
                 raise
@@ -439,7 +440,7 @@ class Collection:
         internal, dists = internal[keep][:k], dists[keep][:k]
         if internal.shape[0] < k and strategy is None:
             # Too few survived (the estimate was optimistic): redo with a bitmap.
-            plan.mask = self.planner.mask(node, self.meta, n, version)
+            plan.mask = self.planner.mask(node, self.meta, n, version, g.capacity)
             res = self._bitmap(plan, g, pqv, vecs, deleted, q, k, ef, n, attrs)
             res.strategy = "post_filter+bitmap"
             return res
@@ -452,11 +453,9 @@ class Collection:
         return self.hnsw.search(vecs, q, k, ef, deleted, mask, g=g)
 
     def _bitmap(self, plan: Plan, g, pqv, vecs, deleted, q, k, ef, n, attrs):
-        # The graph may already link ids >= n (published after we read n), so the
-        # bitmap spans the graph's whole capacity; ids we know nothing about stay False.
-        mask = np.zeros(g.capacity, dtype=np.bool_)
-        mask[:n] = plan.mask[:n]
-        internal, dists, st = self._graph(g, pqv, vecs, deleted, q, k, ef, mask)
+        # plan.mask spans the graph's whole capacity: the graph may already link
+        # ids >= n (published after we read n), and those stay False.
+        internal, dists, st = self._graph(g, pqv, vecs, deleted, q, k, ef, plan.mask)
         return self._result(internal, dists, "bitmap", ef, plan.selectivity, attrs, st)
 
     def _rerank_depth(self, k: int, ef: int) -> int:

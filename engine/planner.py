@@ -53,14 +53,18 @@ class Planner:
         self._cache: OrderedDict[tuple[str, int], np.ndarray] = OrderedDict()
         self._cache_lock = threading.Lock()
 
-    def mask(self, node: Node, meta: MetaStore, n: int, version: int) -> np.ndarray:
+    def mask(self, node: Node, meta: MetaStore, n: int, version: int, cap: int = 0) -> np.ndarray:
+        """Bitmap over ids, padded with False up to ``cap`` (the graph's capacity,
+        which may already hold ids >= n that this reader must not accept)."""
         key = (canonical(node), version)
+        size = max(n, cap)
         with self._cache_lock:
             hit = self._cache.get(key)
-            if hit is not None and hit.shape[0] >= n:
+            if hit is not None and hit.shape[0] >= size:
                 self._cache.move_to_end(key)
                 return hit
-        m = evaluate(node, meta.columns, n)
+        m = np.zeros(size, dtype=np.bool_)
+        m[:n] = evaluate(node, meta.columns, n)
         with self._cache_lock:
             self._cache[key] = m
             while len(self._cache) > self.cache_size:
@@ -74,12 +78,13 @@ class Planner:
         n: int,
         version: int,
         force: str | None = None,
+        cap: int = 0,
     ) -> Plan:
         mask = None
         est = None if n < self.exact_below else estimate(node, meta.stats)
         if est is None:
-            mask = self.mask(node, meta, n, version)
-            sel, exact = float(mask.mean()) if n else 0.0, True
+            mask = self.mask(node, meta, n, version, cap)
+            sel, exact = float(mask[:n].mean()) if n else 0.0, True
         else:
             sel, exact = est, False
         if force is not None:
@@ -93,7 +98,7 @@ class Planner:
         else:
             strategy = "bitmap"
         if strategy != "post_filter" and mask is None:
-            mask = self.mask(node, meta, n, version)
+            mask = self.mask(node, meta, n, version, cap)
         return Plan(strategy, sel, exact, mask)
 
     def post_filter_fetch(self, k: int, ef: int, selectivity: float) -> tuple[int, int]:
