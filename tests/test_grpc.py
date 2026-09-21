@@ -92,3 +92,25 @@ def test_bad_name_rejected(stub):
     with pytest.raises(grpc.RpcError) as e:
         stub.CreateCollection(pb.CreateCollectionRequest(name="../evil", dim=4))
     assert e.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+
+
+def test_client_filtered_search(stub, data):
+    from api.client import Client
+
+    client = Client.__new__(Client)  # reuse the fixture's stub instead of a new channel
+    client.channel = None
+    client.stub = stub
+    client.create_collection("shop", dim=16, index="hnsw")
+    ids = [f"p{i}" for i in range(500)]
+    attrs = [{"price": float(i), "cat": "shoes" if i % 4 == 0 else "hats"} for i in range(500)]
+    assert client.upsert("shop", ids, data[:500], attrs, batch=128) == 500
+    hits = client.search("shop", data[40], k=5, filter='cat == "shoes" AND price < 100',
+                         include_attributes=True)  # fmt: skip
+    assert hits[0]["id"] == "p40" and hits[0]["distance"] == 0.0
+    assert all(h["attributes"]["cat"] == "shoes" and h["attributes"]["price"] < 100 for h in hits)
+    assert client.delete("shop", ["p40"]) == 1
+    assert client.search("shop", data[40], k=1, filter="price < 100")[0]["id"] != "p40"
+    assert client.stats("shop")["count"] == 499
+    with pytest.raises(grpc.RpcError) as e:
+        client.search("shop", data[0], k=5, filter="price <")
+    assert e.value.code() == grpc.StatusCode.INVALID_ARGUMENT
