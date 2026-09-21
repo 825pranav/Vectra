@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 bench = ["faiss-cpu", "matplotlib"]
+data = ["sentence-transformers", "torch"]   # embedding the text dataset (GPU), offline only
 rest = ["fastapi", "uvicorn"]
 
 [dependency-groups]
@@ -23,6 +24,14 @@ dev = ["pytest", "grpcio-tools", "ruff"]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
