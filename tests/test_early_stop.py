@@ -45,15 +45,15 @@ def test_flattened_forest_matches_lightgbm(booster, tmp_path):
 
 def test_features_match_twin():
     topk = np.array([1.0, 2.0, 4.0], dtype=np.float32)
-    out = np.zeros(10)
-    _njit_features(out, 8.0, topk, 6.0, 37, 500, 0.25, 0.5, 20.0)
-    np.testing.assert_allclose(out, ref_features(8.0, topk, 6.0, 37, 500, 0.25, 0.5, 20.0),
-                               rtol=1e-6)  # fmt: skip
+    out = np.zeros(12)
+    args = (8.0, topk, 6.0, 5, 5.0, 37, 500, 0.25, 0.5, 20.0)
+    _njit_features(out, *args)
+    np.testing.assert_allclose(out, ref_features(*args), rtol=1e-6)
     inf_topk = np.array([1.0, np.inf], dtype=np.float32)
-    _njit_features(out, 8.0, inf_topk, 6.0, 3, 50, 0.0, 1.0, 10.0)
+    args = (8.0, inf_topk, 6.0, 9, np.inf, 3, 50, 0.0, 1.0, 10.0)
+    _njit_features(out, *args)
     assert np.all(np.isfinite(out))
-    np.testing.assert_allclose(out, ref_features(8.0, inf_topk, 6.0, 3, 50, 0.0, 1.0, 10.0),
-                               rtol=1e-6)  # fmt: skip
+    np.testing.assert_allclose(out, ref_features(*args), rtol=1e-6)
 
 
 @pytest.fixture(scope="module")
@@ -81,7 +81,7 @@ def test_upfront_forced_ef(graph):
     h, x, q, _ = graph
     for qq in q[:20]:
         full, *_ = run_es(h, x, qq, 10, 128, MODE_FIXED)
-        same, *_ = run_es(h, x, qq, 10, 128, MODE_UPFRONT, probe=8, forced_ef=128)
+        same, *_ = run_es(h, x, qq, 10, 128, MODE_UPFRONT, probe=8, probe_ef=128, forced_ef=128)
         assert np.array_equal(full, same)
         _, _, hops_small, *_ = run_es(h, x, qq, 10, 128, MODE_UPFRONT, probe=8, forced_ef=10)
         _, _, hops_big, *_ = run_es(h, x, qq, 10, 128, MODE_FIXED)
@@ -103,12 +103,17 @@ def test_checkpoint_budget_stops_on_time(graph):
     h, x, q, _ = graph
     forest = _constant_forest(math.log2(40))
     assert _njit_predict(np.zeros(10), *forest.values()) == pytest.approx(math.log2(40))
-    _, _, hops, *_ = run_es(h, x, q[0], 10, 256, MODE_CHECKPOINT, forest, interval=16)
+    # ef_min pins the heap wide so only the hop budget can end the search
+    _, _, hops, *_ = run_es(h, x, q[0], 10, 256, MODE_CHECKPOINT, forest, interval=16,
+                            probe=16, ef_min=256)  # fmt: skip
     assert hops == 40
-    # a budget already exceeded at the first checkpoint stops right there
+    # a budget already exceeded at the first evaluation stops right there
     _, _, hops, *_ = run_es(h, x, q[0], 10, 256, MODE_CHECKPOINT, _constant_forest(2.0),
-                            interval=16)  # fmt: skip
+                            interval=16, probe=16, ef_min=256)  # fmt: skip
     assert hops == 16
+    # without the pin, the heap is sized from the same budget (ef ~ expansions)
+    _, _, hops, *_ = run_es(h, x, q[0], 10, 256, MODE_CHECKPOINT, forest, interval=16)
+    assert hops <= 40
 
 
 def test_record_mode_logs_topk_entries(graph):
@@ -116,15 +121,15 @@ def test_record_mode_logs_topk_entries(graph):
     ids, _, hops, _, feats, log_i, log_h = run_es(
         h, x, q[0], 10, 64, MODE_FIXED, interval=8, record=True
     )
-    assert feats.shape[1] == 10 and 0 < feats.shape[0] <= hops // 8
-    assert np.all(np.diff(feats[:, 5]) > 0)  # log2(hops) grows checkpoint to checkpoint
+    assert feats.shape[1] == 12 and 0 < feats.shape[0] <= hops // 8
+    assert np.all(np.diff(feats[:, 7]) > 0)  # log2(hops) grows checkpoint to checkpoint
     assert set(ids.tolist()) <= set(log_i.tolist())  # every final top-k entry was logged
     assert np.all(np.diff(log_h) >= 0) and log_h.max() <= hops
 
 
 def test_trained_models_beat_budget_floor(graph):
     h, x, q, gt = graph
-    cfg = {"k": 10, "ef_max": 256, "probe": 8, "interval": 8,
+    cfg = {"k": 10, "ef_max": 256, "probe": 8, "probe_ef": 16, "interval": 8,
            "ef_grid": [10, 16, 24, 32, 48, 64, 96, 128, 256],
            "lightgbm": {"num_rounds": 60, "num_threads": 2}}  # fmt: skip
     models = fit_models(h, x, q[:200], gt[:200], cfg)
@@ -133,3 +138,25 @@ def test_trained_models_beat_budget_floor(graph):
         found = np.array([m.search(h, x, qq, 10, mult=1.5)[0] for qq in q[200:]])
         rec = np.mean([len(set(a) & set(b)) / 10 for a, b in zip(found, gt[200:], strict=True)])
         assert rec >= 0.85, (name, rec)
+
+
+def test_collection_uses_budget_model(tmp_path, graph):
+    from engine.collection import Collection
+
+    h, x, q, gt = graph
+    cfg = {
+        "k": 10, "ef_max": 256, "probe": 8, "probe_ef": 32, "interval": 8,
+        "ef_grid": [10, 16, 32, 64, 128, 256],
+        "lightgbm": {"num_rounds": 20, "num_threads": 2},
+    }  # fmt: skip
+    model = fit_models(h, x, q[:100], gt[:100], cfg)["checkpoint"]
+    model.save(tmp_path / "budget.json")
+    over = {"early_stop.model": str(tmp_path / "budget.json")}
+    c = Collection.create(tmp_path / "c", "c", dim=32, overrides=over)
+    c.upsert([str(i) for i in range(2000)], x[:2000], [{"even": i % 2 == 0} for i in range(2000)])
+    res = c.search(x[5], k=5)
+    assert res.strategy == "hnsw+early_stop" and res.ids[0] == "5" and res.ef > 0
+    assert c.search(x[5], k=5, ef=50).strategy == "hnsw"  # explicit ef wins
+    fres = c.search(x[6], k=5, filter="even == true", strategy="bitmap")
+    assert fres.strategy == "bitmap+early_stop" and all(int(i) % 2 == 0 for i in fres.ids)
+    c.close()

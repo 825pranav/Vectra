@@ -39,6 +39,7 @@ from index.distance import normalize
 from index.flat import search_flat, search_subset
 from index.hnsw import HNSWIndex
 from index.pq import ProductQuantizer
+from ml.early_stop import EarlyStopModel
 from storage.meta import AttrValue, MetaStore
 from storage.vectors import VectorStore
 from storage.wal import Delete, Snapshots, WriteAheadLog, encode_delete, encode_upsert
@@ -99,6 +100,14 @@ class Collection:
         self.wal = WriteAheadLog(self.path / "wal", fsync=bool(dur["fsync"]))
         self.snapshots = Snapshots(self.path / "snapshots")
         self.snapshot_every = int(dur["snapshot_every"])
+        # Optional learned search budget (ml/early_stop.py). Off by default: on
+        # the benchmarked datasets it does not beat a well-chosen fixed ef.
+        self.budget_model: EarlyStopModel | None = None
+        es = cfg["early_stop"]
+        if es.get("model") and self.index_type == "hnsw":
+            path = Path(es["model"])
+            path = path if path.is_absolute() else self.path / path
+            self.set_budget_model(EarlyStopModel.load(path))
         self.lsn = 0  # last log sequence number applied
         self._since_snapshot = 0  # rows written since the last snapshot
 
@@ -402,23 +411,33 @@ class Collection:
         g = self.hnsw.g if self.hnsw is not None else None
         pqv = self._pq_view
         n, vecs, deleted, version = self.n, self.store.array, self.deleted, self.version
+        # Budget: an explicit ef wins; otherwise the learned model if one is
+        # loaded (graph + full-precision search only); otherwise the config default.
+        model = self.budget_model if ef is None and g is not None and pqv is None else None
         ef = int(ef or self.cfg["hnsw"]["ef_search"])
 
         if node is None:
             if g is None:
                 internal, dists = search_flat(vecs, n, q, k, deleted)
                 return self._result(internal, dists, "flat", 0, 1.0, include_attributes)
+            if model is not None:
+                internal, dists, st = model.search(self.hnsw, vecs, q, k, None, deleted, g=g)
+                return self._result(internal, dists, "hnsw+early_stop", st["hops"], 1.0,
+                                    include_attributes, st)  # fmt: skip
             internal, dists, st = self._graph(g, pqv, vecs, deleted, q, k, ef, None)
             base = "hnsw_pq" if pqv is not None else "hnsw"
             return self._result(internal, dists, base, ef, 1.0, include_attributes, st)
         try:
             return self._filtered(
-                node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, include_attributes
-            )
+                node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, include_attributes,
+                model,
+            )  # fmt: skip
         except FilterError as e:
             raise InvalidArgument(f"bad filter: {e}") from e
 
-    def _filtered(self, node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, attrs):
+    def _filtered(
+        self, node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, attrs, model=None
+    ):
         force = "brute_force" if g is None else strategy
         cap = 0 if g is None else g.capacity
         try:
@@ -433,6 +452,11 @@ class Collection:
             st = {"candidates": int(ids.size)}
             return self._result(internal, dists, "brute_force", 0, plan.selectivity, attrs, st)
         if plan.strategy == "bitmap":
+            if model is not None:  # selectivity is one of the model's features
+                internal, dists, st = model.search(self.hnsw, vecs, q, k, None, deleted,
+                                                   plan.mask, plan.selectivity, g)  # fmt: skip
+                return self._result(internal, dists, "bitmap+early_stop", st["hops"],
+                                    plan.selectivity, attrs, st)  # fmt: skip
             return self._bitmap(plan, g, pqv, vecs, deleted, q, k, ef, n, attrs)
         fetch, ef_post = self.planner.post_filter_fetch(k, ef, plan.selectivity)
         internal, dists, st = self._graph(g, pqv, vecs, deleted, q, fetch, ef_post, None)
@@ -457,6 +481,14 @@ class Collection:
         # ids >= n (published after we read n), and those stay False.
         internal, dists, st = self._graph(g, pqv, vecs, deleted, q, k, ef, plan.mask)
         return self._result(internal, dists, "bitmap", ef, plan.selectivity, attrs, st)
+
+    def set_budget_model(self, model: EarlyStopModel | None) -> None:
+        """Use ``model`` to pick the per-query budget when a search passes no ef."""
+        if model is not None and self.index_type != "hnsw":
+            raise InvalidArgument("learned budgets are only supported for the hnsw index")
+        if model is not None:
+            model.meta.setdefault("multiplier", float(self.cfg["early_stop"]["multiplier"]))
+        self.budget_model = model
 
     def _rerank_depth(self, k: int, ef: int) -> int:
         p = self.cfg["pq"]

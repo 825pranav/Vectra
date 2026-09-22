@@ -4,24 +4,31 @@ A fixed ``ef`` has to be large enough for the *hardest* queries, so easy queries
 overpay. Here a LightGBM model looks at cheap signals from the search itself and
 sets a per-query budget instead. Two variants, both benchmarked:
 
-``upfront``     run a short probe (``probe`` expansions with a wide result
-                heap), predict the ``ef`` this query needs, shrink the heap to
-                it and let HNSW terminate normally. One prediction per query.
-``checkpoint``  every ``interval`` expansions, predict the total number of
-                expansions the query needs; stop as soon as the search has done
-                that many ("can I stop now?"). Re-predicted with fresh features.
+``upfront``     run a short probe with a small result heap, predict the ``ef``
+                this query needs, resize the heap and let HNSW terminate
+                normally. One prediction per query.
+``checkpoint``  from the probe on, every ``interval`` expansions predict the
+                total number of expansions the query needs; stop once reached
+                ("can I stop now?"), re-predicting with fresher features.
 
-Features (all O(1) to maintain, see ``_njit_features``): distance to the layer-0
-entry point, best and k-th distances found so far relative to it, the gap
-between them, how far the next candidate is beyond the k-th, expansions and
-distance computations so far, how often the top-k improved in the last window,
-filter selectivity and dataset size.
+Budget sizing uses the fact that an HNSW search at a given ``ef`` performs about
+``ef`` expansions, so the checkpoint variant sizes the result heap from the same
+prediction (``ef ~ budget``). That matters for speed: a search run under a
+generously wide heap admits almost every neighbour into both heaps and costs
+~2x per expansion, which would eat the savings (see bench/micro/es_overhead.py).
 
-Labels come from generous searches on held-out *training* queries (never the
-test queries): the expansion step at which each true neighbour first entered
-the result set (checkpoint), and the smallest ``ef`` that recovers everything
-the generous search found (upfront). The model predicts log2 of the budget; a
-multiplier on the prediction trades latency for recall and traces the curve.
+Features (all O(1)/O(candidates) at a checkpoint, see ``_njit_features``):
+distance to the layer-0 entry point, best and k-th distances found so far
+relative to it, the gap between them, how far the next candidate is beyond the
+k-th, how many unexpanded candidates are still closer than the k-th, how much
+the k-th improved since the last checkpoint, expansions and distance
+computations so far, recent top-k updates, filter selectivity and dataset size.
+
+Labels come from searches on held-out *training* queries only: the expansion at
+which each true neighbour first entered the top-k under a generous search
+(checkpoint), and the smallest ``ef`` that recovers everything the generous
+search found (upfront). The model predicts log2 of the budget; a multiplier on
+the prediction trades latency for recall and traces the curve.
 
 The trained trees are flattened (ml/trees.py) and evaluated inside the Numba
 search loop, so a prediction costs about a microsecond, not a Python call.
@@ -57,6 +64,8 @@ FEATURES = [
     "kth_over_entry",
     "kth_over_best",
     "cand_over_kth",
+    "log2_promising",
+    "kth_change",
     "log2_hops",
     "log2_ndist",
     "recent_topk_updates",
@@ -65,38 +74,48 @@ FEATURES = [
 ]
 N_FEAT = len(FEATURES)
 MODE_FIXED, MODE_UPFRONT, MODE_CHECKPOINT = 0, 1, 2
+# These kernels use inf as "no k-th result yet". Full fastmath lets LLVM assume
+# no infinities (``x < inf`` folds to true), so keep every flag except ninf/nnan:
+# reassociation is what vectorises the distance loop.
+_FASTMATH = {"reassoc", "contract", "arcp", "nsz", "afn"}
 _CAP = 1e3  # ratios are clamped: before k results exist the k-th distance is inf
 
 
-@njit(cache=True, fastmath=True, nogil=True)
-def _njit_features(out, d_ep, topk, d_cand, hops, ndist, recent, sel, log2n):
+@njit(cache=True, fastmath=_FASTMATH, nogil=True)
+def _njit_features(out, d_ep, topk, d_cand, promising, prev_kth, hops, ndist, recent, sel, log2n):
     eps = 1e-12
     k = topk.shape[0]
     d_best = topk[0]
     d_kth = topk[k - 1]
+    full = d_kth < np.inf
     out[0] = math.log(d_ep + eps)
     out[1] = min(d_best / (d_ep + eps), _CAP)
-    out[2] = min(d_kth / (d_ep + eps), _CAP)
-    out[3] = min(d_kth / (d_best + eps), _CAP)
-    out[4] = min(d_cand / (d_kth + eps), _CAP) if d_kth < np.inf else 0.0
-    out[5] = math.log2(hops + 1.0)
-    out[6] = math.log2(ndist + 1.0)
-    out[7] = recent
-    out[8] = sel
-    out[9] = log2n
+    out[2] = min(d_kth / (d_ep + eps), _CAP) if full else _CAP
+    out[3] = min(d_kth / (d_best + eps), _CAP) if full else _CAP
+    out[4] = min(d_cand / (d_kth + eps), _CAP) if full else 0.0
+    out[5] = math.log2(promising + 1.0)
+    out[6] = d_kth / prev_kth if full and prev_kth < np.inf and prev_kth > 0 else 1.0
+    out[7] = math.log2(hops + 1.0)
+    out[8] = math.log2(ndist + 1.0)
+    out[9] = recent
+    out[10] = sel
+    out[11] = log2n
 
 
-def ref_features(d_ep, topk, d_cand, hops, ndist, recent, sel, log2n) -> np.ndarray:
+def ref_features(d_ep, topk, d_cand, promising, prev_kth, hops, ndist, recent, sel, log2n):
     """NumPy twin of ``_njit_features``."""
     eps = 1e-12
     d_best, d_kth = float(topk[0]), float(topk[-1])
+    full = np.isfinite(d_kth)
     return np.array(
         [
             math.log(d_ep + eps),
             min(d_best / (d_ep + eps), _CAP),
-            min(d_kth / (d_ep + eps), _CAP),
-            min(d_kth / (d_best + eps), _CAP),
-            min(d_cand / (d_kth + eps), _CAP) if np.isfinite(d_kth) else 0.0,
+            min(d_kth / (d_ep + eps), _CAP) if full else _CAP,
+            min(d_kth / (d_best + eps), _CAP) if full else _CAP,
+            min(d_cand / (d_kth + eps), _CAP) if full else 0.0,
+            math.log2(promising + 1.0),
+            d_kth / prev_kth if full and np.isfinite(prev_kth) and prev_kth > 0 else 1.0,
             math.log2(hops + 1.0),
             math.log2(ndist + 1.0),
             recent,
@@ -106,30 +125,31 @@ def ref_features(d_ep, topk, d_cand, hops, ndist, recent, sel, log2n) -> np.ndar
     )
 
 
-@njit(cache=True, fastmath=True, nogil=True)
+@njit(cache=True, fastmath=_FASTMATH, nogil=True)
 def _njit_search_es(
     q, vecs, nbr0, upper, upper_row, entry, max_level, k, ef_max,
     deleted, mask, use_mask, visited, tag,
-    mode, probe, interval, mult, ef_min, forced_ef, sel, log2n,
+    mode, probe, probe_ef, interval, mult, ef_min, forced_ef, sel, log2n,
     feature, threshold, left, right, value, roots,
     record, max_ckpt,
 ):  # fmt: skip
     """HNSW search whose budget is set by the flattened model (see module doc).
 
-    ``record`` (training only) stores the features at every checkpoint and a log
-    of (node, expansion) for every insertion into the running top-k.
-    ``forced_ef > 0`` replaces the upfront prediction (used to generate labels).
+    ``MODE_FIXED`` runs a plain search at ``ef_max`` (with ``record``, it logs
+    features at every checkpoint and every insertion into the running top-k,
+    which is how training labels are made). ``forced_ef > 0`` replaces the
+    upfront prediction (also for labels).
     """
     ep, dep, nd0 = _njit_descend(q, vecs, upper, upper_row, entry, max_level)
-    ef = ef_max
+    ef = ef_max if mode == MODE_FIXED else min(max(probe_ef, k), ef_max)
     cap = max(64, 4 * ef_max)
     cd = np.empty(cap, dtype=np.float32)
     ci = np.empty(cap, dtype=np.int32)
     wd = np.empty(ef_max + 1, dtype=np.float32)
     wi = np.empty(ef_max + 1, dtype=np.int32)
     topk = np.full(k, np.inf, dtype=np.float32)
-    feats = np.zeros((max_ckpt if record else 1, 10), dtype=np.float64)
-    x = np.zeros(10, dtype=np.float64)
+    feats = np.zeros((max_ckpt if record else 1, 12), dtype=np.float64)
+    x = np.zeros(12, dtype=np.float64)
     log_i = np.empty(64 if record else 1, dtype=np.int32)
     log_h = np.empty(64 if record else 1, dtype=np.int32)
     n_log = 0
@@ -149,37 +169,48 @@ def _njit_search_es(
     recent = 0
     budget = -1.0
     probed = False
+    last_eval = -1
+    prev_kth = np.float32(np.inf)
     width = nbr0.shape[1]
     while nc > 0:
         if nw >= ef and cd[0] > wd[0]:
             break
         if budget >= 0.0 and hops >= budget:
             break
-        at_probe = mode == MODE_UPFRONT and not probed and hops >= probe
-        at_ckpt = hops > 0 and hops % interval == 0 and (mode == MODE_CHECKPOINT or record)
-        if at_probe or at_ckpt:
-            _njit_features(x, dep, topk, cd[0], hops, ndist, recent / max(interval, 1), sel,
-                           log2n)  # fmt: skip
-            recent = 0
-            if record and at_ckpt and n_feat < max_ckpt:
-                feats[n_feat, :] = x
-                n_feat += 1
-            if at_probe:
-                probed = True
-                if forced_ef > 0:
-                    ef = forced_ef
-                else:
-                    p = _njit_predict(x, feature, threshold, left, right, value, roots)
-                    ef = int(round(2.0**p * mult))
-                ef = min(max(ef, ef_min, k), ef_max)
-                while nw > ef:
-                    nw = _njit_maxheap_pop(wd, wi, nw)
-                continue  # re-check termination with the new ef
-            if mode == MODE_CHECKPOINT:
-                p = _njit_predict(x, feature, threshold, left, right, value, roots)
-                budget = float(round(2.0**p * mult))
-                if hops >= budget:
-                    break
+        if hops != last_eval:
+            at_probe = mode != MODE_FIXED and not probed and hops >= probe
+            at_ckpt = (
+                hops > 0
+                and hops % interval == 0
+                and (record or (mode == MODE_CHECKPOINT and probed))
+            )
+            if at_probe or at_ckpt:
+                last_eval = hops
+                promising = 0
+                for t in range(nc):
+                    if cd[t] < topk[k - 1]:
+                        promising += 1
+                _njit_features(x, dep, topk, cd[0], promising, prev_kth, hops, ndist,
+                               recent / max(interval, 1), sel, log2n)  # fmt: skip
+                recent = 0
+                prev_kth = topk[k - 1]
+                if record and n_feat < max_ckpt:
+                    feats[n_feat, :] = x
+                    n_feat += 1
+                if at_probe or mode == MODE_CHECKPOINT:
+                    probed = True
+                    if at_probe and forced_ef > 0:
+                        ef = forced_ef
+                    else:
+                        b = 2.0 ** _njit_predict(x, feature, threshold, left, right, value, roots)
+                        b = b * mult
+                        ef = int(round(b))
+                        if mode == MODE_CHECKPOINT:
+                            budget = float(round(b))
+                    ef = min(max(ef, ef_min, k), ef_max)
+                    while nw > ef:
+                        nw = _njit_maxheap_pop(wd, wi, nw)
+                    continue  # re-check termination under the new budget
         c = ci[0]
         nc = _njit_minheap_pop(cd, ci, nc)
         hops += 1
@@ -241,6 +272,7 @@ def run_es(
     forest: dict[str, np.ndarray] | None = None,
     *,
     probe: int = 16,
+    probe_ef: int = 32,
     interval: int = 16,
     mult: float = 1.0,
     ef_min: int = 10,
@@ -263,7 +295,7 @@ def run_es(
     return _njit_search_es(
         q, vecs, g.nbr0, g.upper, g.upper_row, g.entry, g.max_level, k, ef_max,
         deleted, mask, use_mask, visited, tag,
-        mode, probe, interval, float(mult), ef_min, forced_ef, float(selectivity),
+        mode, probe, probe_ef, interval, float(mult), ef_min, forced_ef, float(selectivity),
         math.log2(max(index.n, 1)),
         f["feature"], f["threshold"], f["left"], f["right"], f["value"], f["roots"],
         record, max_ckpt,
@@ -280,53 +312,44 @@ def collect(
     vecs: np.ndarray,
     queries: np.ndarray,
     gt: np.ndarray,
-    k: int,
-    ef_max: int,
-    probe: int,
-    interval: int,
-    ef_grid: list[int],
+    cfg: dict[str, Any],
 ) -> dict[str, np.ndarray]:
-    """Training rows for both variants from generous searches on ``queries``."""
+    """Training rows for both variants from searches on training ``queries``."""
+    k, ef_max, probe, probe_ef = cfg["k"], cfg["ef_max"], cfg["probe"], cfg["probe_ef"]
+    interval, grid = cfg["interval"], cfg["ef_grid"]
     ck_x, ck_y, ck_q = [], [], []
     up_x, up_y = [], []
     for qi, q in enumerate(queries):
         truth = set(gt[qi, :k].tolist())
+        # checkpoint rows: features at every checkpoint of a generous search,
+        # label = expansion at which the last reachable true neighbour showed up
         ids, _, hops, _, feats, log_i, log_h = run_es(
-            index, vecs, q, k, ef_max, MODE_FIXED, probe=probe, interval=interval, record=True
+            index, vecs, q, k, ef_max, MODE_FIXED, interval=interval, record=True
         )
         found = truth & set(ids.tolist())
         first: dict[int, int] = {}
         for node, h in zip(log_i.tolist(), log_h.tolist(), strict=True):
             first.setdefault(node, h)
-        need = max((first.get(n, hops) for n in found), default=hops)
-        need = max(need, 1)
+        need = max(max((first.get(n, hops) for n in found), default=hops), 1)
         for j in range(feats.shape[0]):
             ck_x.append(feats[j])
             ck_y.append(math.log2(need))
             ck_q.append(qi)
-        # upfront: smallest ef that recovers what the generous search found
-        target = len(found)
-        best = ef_grid[-1]
-        for ef in ef_grid:
-            got, *_ = run_es(index, vecs, q, k, ef_max, MODE_UPFRONT, probe=probe,
-                             interval=interval, forced_ef=ef)  # fmt: skip
-            if len(truth & set(got.tolist())) >= target:
+        # upfront row: probe features, label = smallest ef (after the probe)
+        # that recovers everything the generous search found
+        best, probe_feats = grid[-1], None
+        for ef in grid:
+            got, _, _, _, pf, _, _ = run_es(
+                index, vecs, q, k, ef_max, MODE_UPFRONT, probe=probe, probe_ef=probe_ef,
+                interval=interval, forced_ef=ef, record=True, max_ckpt=1,
+            )  # fmt: skip
+            if probe_feats is None and pf.shape[0]:
+                probe_feats = pf[0]
+            if len(truth & set(got.tolist())) >= len(found):
                 best = ef
                 break
-        _, _, _, _, pf, _, _ = run_es(
-            index,
-            vecs,
-            q,
-            k,
-            ef_max,
-            MODE_FIXED,
-            probe=probe,
-            interval=probe,
-            record=True,
-            max_ckpt=1,
-        )
-        if pf.shape[0]:
-            up_x.append(pf[0])
+        if probe_feats is not None:
+            up_x.append(probe_feats)
             up_y.append(math.log2(best))
     return {
         "ck_x": np.asarray(ck_x),
@@ -343,7 +366,9 @@ def train(
     """Fit a LightGBM regressor on log2(budget); returns the flattened forest.
 
     A query-level split (``groups``) holds out 10% of training queries for early
-    stopping, so rows from one query never land on both sides.
+    stopping, so rows from one query never land on both sides. Forests are kept
+    small on purpose: every tree costs a few nanoseconds per prediction and the
+    checkpoint variant predicts several times per query.
     """
     import lightgbm as lgb
 
@@ -355,8 +380,8 @@ def train(
     is_val = np.array([g in val_q for g in groups])
     lgb_params = {
         "objective": "regression",
-        "learning_rate": params.get("learning_rate", 0.05),
-        "num_leaves": params.get("num_leaves", 31),
+        "learning_rate": params.get("learning_rate", 0.1),
+        "num_leaves": params.get("num_leaves", 15),
         "min_data_in_leaf": params.get("min_data_in_leaf", 50),
         "feature_fraction": 1.0,
         "bagging_fraction": 1.0,
@@ -370,9 +395,9 @@ def train(
     booster = lgb.train(
         lgb_params,
         dtrain,
-        num_boost_round=params.get("num_rounds", 300),
+        num_boost_round=params.get("num_rounds", 60),
         valid_sets=[dval],
-        callbacks=[lgb.early_stopping(30, verbose=False)],
+        callbacks=[lgb.early_stopping(20, verbose=False)],
     )
     return flatten(booster.dump_model(num_iteration=booster.best_iteration))
 
@@ -408,7 +433,7 @@ class EarlyStopModel:
         m = self.meta
         ids, ds, hops, nd, *_ = run_es(
             index, vecs, q, k, m["ef_max"], self.mode, self.forest,
-            probe=m["probe"], interval=m["interval"],
+            probe=m["probe"], probe_ef=m["probe_ef"], interval=m["interval"],
             mult=m.get("multiplier", 1.0) if mult is None else mult,
             ef_min=m.get("ef_min", 10), selectivity=selectivity,
             deleted=deleted, mask=mask, g=g,
@@ -424,15 +449,15 @@ def fit_models(
     cfg: dict[str, Any],
 ) -> dict[str, EarlyStopModel]:
     """Label ``queries`` and train both variants with settings from ``cfg``."""
-    k = int(cfg["k"])
-    rows = collect(index, vecs, queries, gt, k, cfg["ef_max"], cfg["probe"],
-                   cfg["interval"], cfg["ef_grid"])  # fmt: skip
+    cfg = {"probe_ef": 32, **cfg}
+    rows = collect(index, vecs, queries, gt, cfg)
     base = {
         "ef_max": cfg["ef_max"],
         "probe": cfg["probe"],
+        "probe_ef": cfg["probe_ef"],
         "interval": cfg["interval"],
         "ef_min": cfg.get("ef_min", 10),
-        "k": k,
+        "k": int(cfg["k"]),
         "features": FEATURES,
     }
     params = cfg.get("lightgbm", {})
@@ -458,7 +483,7 @@ def main() -> None:
     from index.flat import search_flat
 
     col_dir, qpath, cfg_path, out = sys.argv[1:5]
-    cfg = load_yaml(cfg_path)["early_stop_training"]
+    cfg = load_yaml(cfg_path)["training"]
     col = Collection.open(col_dir)
     try:
         queries = np.load(qpath).astype(np.float32)
