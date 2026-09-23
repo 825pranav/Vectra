@@ -34,9 +34,8 @@ planner:
   stats_refresh_fraction: 0.1         # re-analyse attributes after this much churn
 
 early_stop:
-  model: null             # path to a trained early-stop model (.json); null disables
-  mode: checkpoint        # checkpoint | upfront
-  multiplier: 1.0
+  model: null             # trained budget model (.json, from ml/early_stop.py); null = fixed ef
+  multiplier: 1.0         # scales the predicted budget (recall/latency knob)
 
 durability:
   fsync: true
