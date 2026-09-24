@@ -24,8 +24,10 @@ from bench.common import (
     INK2,
     MUTED,
     RESULTS,
+    direct_labels,
     median,
     new_figure,
+    pinned_to_cpu,
     recall_at_k,
     save_figure,
     save_json,
@@ -315,10 +317,10 @@ def register(kind: str, cls: type[Engine]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def measure_point(eng: Engine, Q, gt, k, p, warmup, runs, n_lat) -> dict[str, Any]:
+def measure_point(eng: Engine, Q, gt, k, p, warmup, runs, n_lat, cpu=None) -> dict[str, Any]:
     times, ids = timed(lambda: eng.batch(Q, k, p), warmup, runs)
     lat_q = Q[:n_lat]
-    with eng.single_thread():
+    with eng.single_thread(), pinned_to_cpu(cpu):
         for _ in range(warmup):
             for q in lat_q[:200]:
                 eng.single(q, k, p)
@@ -384,7 +386,10 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     for spec, eng, meta in built:
         points = []
         for p in spec["sweep"]:
-            pt = measure_point(eng, Q, gt, k, p, cfg["warmup"], cfg["runs"], cfg["latency_queries"])
+            pt = measure_point(
+                eng, Q, gt, k, p, cfg["warmup"], cfg["runs"], cfg["latency_queries"],
+                cfg.get("latency_cpu"),
+            )  # fmt: skip
             points.append(pt)
             print(
                 f"[{eng.name}] {eng.param}={p:<5} recall={pt['recall']:.4f} "
@@ -429,21 +434,15 @@ def plot(
                 markeredgecolor="#fcfcfb", markeredgewidth=1.2, label=e["name"])  # fmt: skip
         visible = [(a, b) for a, b in zip(x, y, strict=True) if a >= xmin]
         if visible:
-            anchors.append((visible[0], e["name"]))
-    if len(engines) <= 4:
-        # direct labels at the left end; the lowest line is labelled underneath
-        lowest = min(anchors, key=lambda a: a[0][1])[1] if anchors else None
-        for xy, label in anchors:
-            below = label == lowest and len(anchors) > 1
-            ax.annotate(label, xy, xytext=(4, -10 if below else 9), textcoords="offset points",
-                        ha="left", va="top" if below else "bottom", fontsize=9,
-                        color=INK2)  # fmt: skip
-    ax.set_xlim(left=xmin, right=1.0)
+            anchors.append((visible[0], e["name"], color))
     for t in targets:
         ax.axvline(t, color=MUTED, linewidth=0.8)
         ax.text(t, 1.0, f" recall {t}", transform=ax.get_xaxis_transform(), va="top",
                 fontsize=8, color=MUTED)  # fmt: skip
     ax.set_yscale("log")
+    ax.set_xlim(left=xmin, right=1.0)
+    if len(engines) <= 4:
+        direct_labels(ax, anchors)
     ax.set_xlabel(f"recall@{k}")
     ax.set_ylabel(f"queries / second ({out['system']['threads']} threads, log scale)")
     ax.set_title(title, loc="left", fontsize=11)

@@ -14,6 +14,8 @@ from engine.config import load_yaml
 EXPERIMENTS = {
     "ann_curves": "bench.ann",
     "crash": "bench.crash",
+    "filters": "bench.filters",
+    "early_stop": "bench.early_stop",
 }
 
 

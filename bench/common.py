@@ -107,6 +107,49 @@ def system_info(threads: int) -> dict[str, Any]:
     return info
 
 
+class pinned_to_cpu:
+    """Pin the calling thread to one logical CPU for single-threaded timing.
+
+    Hybrid Intel parts mix P- and E-cores (on the reference laptop, logical
+    CPUs 0-11 are P-cores and 12-19 E-cores, ~1.6x slower); an unpinned thread
+    migrates between them mid-run and turns latency numbers into noise.
+    ``cpu=None`` leaves scheduling alone.
+    """
+
+    def __init__(self, cpu: int | None) -> None:
+        self.cpu = cpu
+        self._old = None
+
+    def __enter__(self):
+        if self.cpu is None:
+            return self
+        if sys.platform == "win32":
+            k32 = ctypes.windll.kernel32
+            k32.GetCurrentThread.restype = ctypes.c_void_p
+            k32.SetThreadAffinityMask.restype = ctypes.c_size_t
+            k32.SetThreadAffinityMask.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+            self._old = k32.SetThreadAffinityMask(k32.GetCurrentThread(), 1 << self.cpu)
+        else:
+            import os
+
+            self._old = os.sched_getaffinity(0)
+            os.sched_setaffinity(0, {self.cpu})
+        time.sleep(0.05)
+        return self
+
+    def __exit__(self, *exc):
+        if self.cpu is None or self._old is None:
+            return False
+        if sys.platform == "win32":
+            k32 = ctypes.windll.kernel32
+            k32.SetThreadAffinityMask(k32.GetCurrentThread(), self._old)
+        else:
+            import os
+
+            os.sched_setaffinity(0, self._old)
+        return False
+
+
 def timed(fn: Callable[[], Any], warmup: int, runs: int) -> tuple[list[float], Any]:
     """Run ``fn`` warmup + runs times; return the timed durations and the last result."""
     out = None
@@ -175,6 +218,31 @@ def new_figure(width: float = 7.5, height: float = 4.6):
     fig.patch.set_facecolor(SURFACE)
     style_axes(ax)
     return fig, ax
+
+
+def direct_labels(ax, anchors: list[tuple[tuple[float, float], str, str]], min_gap: float = 13.0):
+    """Label each line at its anchor point, nudged apart vertically (in pixels)
+    so labels never overlap each other; a thin leader ties a nudged label back.
+
+    ``anchors``: [((x, y), text, color)] in data coordinates.
+    """
+    if not anchors:
+        return
+    fig = ax.figure
+    fig.canvas.draw()
+    to_px = ax.transData.transform
+    pts = sorted(((to_px(xy), xy, t, c) for xy, t, c in anchors), key=lambda a: a[0][1])
+    ys = [p[0][1] for p in pts]
+    for i in range(1, len(ys)):  # push up until every pair is min_gap apart
+        ys[i] = max(ys[i], ys[i - 1] + min_gap)
+    shift = (sum(p[0][1] for p in pts) - sum(ys)) / len(ys)  # re-centre the stack
+    for (px, xy, text, color), y in zip(pts, ys, strict=True):
+        dy = y + shift - px[1]
+        ax.annotate(
+            text, xy, xytext=(8, dy), textcoords="offset points", va="center", ha="left",
+            fontsize=9, color=INK2,
+            arrowprops={"arrowstyle": "-", "color": color, "lw": 0.8} if abs(dy) > 4 else None,
+        )  # fmt: skip
 
 
 def save_figure(fig, name: str) -> Path:

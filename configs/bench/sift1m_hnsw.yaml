@@ -8,6 +8,7 @@ threads: 16            # batch QPS threads, also used for index builds
 warmup: 3
 runs: 5
 latency_queries: 2000  # single-thread per-query latency sample (first N test queries)
+latency_cpu: 2          # pin single-thread latency to one P-core (hybrid CPU)
 recall_targets: [0.95]
 engines:
   - name: siftdb-hnsw

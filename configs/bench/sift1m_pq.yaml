@@ -8,6 +8,7 @@ threads: 16
 warmup: 3
 runs: 5
 latency_queries: 2000
+latency_cpu: 2          # pin single-thread latency to one P-core (hybrid CPU)
 recall_targets: [0.9, 0.95]
 plot_xmin: 0.5
 engines:
