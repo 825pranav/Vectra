@@ -1,0 +1,28 @@
+# Learned early termination vs fixed ef on MS MARCO 300k (single thread, per-query).
+#   python -m bench.run configs/bench/msmarco_early_stop.yaml
+experiment: early_stop
+title: "MS MARCO 300k (MiniLM): learned early termination vs fixed ef"
+dataset: msmarco300k
+k: 10
+threads: 16                  # graph build only; all timings are single-threaded
+warmup: 3
+runs: 5
+latency_cpu: 2               # pin timing to one P-core (hybrid CPU; see bench/common.py)
+n_queries: 10000             # every test query
+index: {M: 16, ef_construction: 200, seed: 42}
+training:                    # labels come from the learn split only
+  k: 10
+  n_train: 10000
+  ef_max: 512
+  probe: 16                  # expansions before the first prediction
+  probe_ef: 64               # heap width during the probe (smaller measurably adds hops)
+  interval: 16
+  ef_min: 10
+  ef_grid: [10, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128, 160, 192, 256, 384, 512]
+  # small on purpose: each tree costs nanoseconds per prediction inside the loop
+  lightgbm: {num_rounds: 60, learning_rate: 0.1, num_leaves: 15, min_data_in_leaf: 50,
+             num_threads: 8, seed: 42}
+fixed_ef: [16, 24, 32, 48, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512]
+multipliers: [0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
+recall_targets: [0.9, 0.95, 0.97, 0.98]
+plot_xmin: 0.85

@@ -1,0 +1,463 @@
+{
+  "experiment": "early_stop",
+  "config": {
+    "experiment": "early_stop",
+    "title": "SIFT1M: learned early termination vs fixed ef",
+    "dataset": "sift1m",
+    "k": 10,
+    "threads": 16,
+    "warmup": 3,
+    "runs": 5,
+    "latency_cpu": 2,
+    "n_queries": 10000,
+    "index": {
+      "M": 16,
+      "ef_construction": 200,
+      "seed": 42
+    },
+    "training": {
+      "k": 10,
+      "n_train": 10000,
+      "ef_max": 512,
+      "probe": 16,
+      "probe_ef": 64,
+      "interval": 16,
+      "ef_min": 10,
+      "ef_grid": [
+        10,
+        12,
+        16,
+        20,
+        24,
+        32,
+        40,
+        48,
+        64,
+        80,
+        96,
+        128,
+        160,
+        192,
+        256,
+        384,
+        512
+      ],
+      "lightgbm": {
+        "num_rounds": 60,
+        "learning_rate": 0.1,
+        "num_leaves": 15,
+        "min_data_in_leaf": 50,
+        "num_threads": 8,
+        "seed": 42
+      }
+    },
+    "fixed_ef": [
+      16,
+      24,
+      32,
+      48,
+      64,
+      80,
+      96,
+      128,
+      160,
+      192,
+      256,
+      320,
+      384,
+      512
+    ],
+    "multipliers": [
+      0.6,
+      0.8,
+      1.0,
+      1.2,
+      1.5,
+      2.0,
+      2.5,
+      3.0,
+      4.0,
+      5.0
+    ],
+    "recall_targets": [
+      0.9,
+      0.95,
+      0.98,
+      0.99
+    ],
+    "plot_xmin": 0.85
+  },
+  "system": {
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13500HX",
+    "ram_gb": 31.7,
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14",
+    "numpy": "2.5.3",
+    "numba": "0.67.0",
+    "numba_threading_layer": null,
+    "threads": 1,
+    "faiss": "1.15.1"
+  },
+  "build": {
+    "build_s": 45.7797763000126,
+    "build_threads": 16,
+    "index_bytes": 649258752,
+    "graph_bytes": 137258752
+  },
+  "curves": {
+    "fixed-ef": [
+      {
+        "ef": 16,
+        "recall": 0.74108,
+        "lat_mean_ms": 0.06200846998544876,
+        "lat_p50_ms": 0.0585000088904053,
+        "lat_p99_ms": 0.07870001718401909,
+        "hops_mean": 19.34,
+        "ndist_mean": 501.1824
+      },
+      {
+        "ef": 24,
+        "recall": 0.81433,
+        "lat_mean_ms": 0.07521265996620059,
+        "lat_p50_ms": 0.07180002285167575,
+        "lat_p99_ms": 0.0945999930263497,
+        "hops_mean": 26.9205,
+        "ndist_mean": 633.5111
+      },
+      {
+        "ef": 32,
+        "recall": 0.8591599999999999,
+        "lat_mean_ms": 0.0907583997148322,
+        "lat_p50_ms": 0.08550001075491309,
+        "lat_p99_ms": 0.1109000004362315,
+        "hops_mean": 34.528,
+        "ndist_mean": 761.3384
+      },
+      {
+        "ef": 48,
+        "recall": 0.9112500000000001,
+        "lat_mean_ms": 0.1127330099203391,
+        "lat_p50_ms": 0.10930001735687256,
+        "lat_p99_ms": 0.13830000534653664,
+        "hops_mean": 49.9399,
+        "ndist_mean": 1009.2854
+      },
+      {
+        "ef": 64,
+        "recall": 0.9392799999999999,
+        "lat_mean_ms": 0.13596261008351576,
+        "lat_p50_ms": 0.132500019390136,
+        "lat_p99_ms": 0.1640999980736524,
+        "hops_mean": 65.5551,
+        "ndist_mean": 1249.4388
+      },
+      {
+        "ef": 80,
+        "recall": 0.9555199999999999,
+        "lat_mean_ms": 0.1578062599292025,
+        "lat_p50_ms": 0.155999994603917,
+        "lat_p99_ms": 0.19090099842287603,
+        "hops_mean": 81.2889,
+        "ndist_mean": 1482.7404
+      },
+      {
+        "ef": 96,
+        "recall": 0.96635,
+        "lat_mean_ms": 0.18122901006718167,
+        "lat_p50_ms": 0.17710000975057483,
+        "lat_p99_ms": 0.21669999143341556,
+        "hops_mean": 97.111,
+        "ndist_mean": 1709.9165
+      },
+      {
+        "ef": 128,
+        "recall": 0.97889,
+        "lat_mean_ms": 0.22548945987655314,
+        "lat_p50_ms": 0.22310001077130437,
+        "lat_p99_ms": 0.27359998784959316,
+        "hops_mean": 128.8719,
+        "ndist_mean": 2148.5202
+      },
+      {
+        "ef": 160,
+        "recall": 0.98568,
+        "lat_mean_ms": 0.27141715996840504,
+        "lat_p50_ms": 0.2671999973244965,
+        "lat_p99_ms": 0.3286009992007166,
+        "hops_mean": 160.7438,
+        "ndist_mean": 2570.1362
+      },
+      {
+        "ef": 192,
+        "recall": 0.9896800000000001,
+        "lat_mean_ms": 0.3097605199669488,
+        "lat_p50_ms": 0.3068000078201294,
+        "lat_p99_ms": 0.3756010078359395,
+        "hops_mean": 192.6342,
+        "ndist_mean": 2976.7426
+      },
+      {
+        "ef": 256,
+        "recall": 0.99391,
+        "lat_mean_ms": 0.3961875500710448,
+        "lat_p50_ms": 0.39099997957237065,
+        "lat_p99_ms": 0.4834009846672416,
+        "hops_mean": 256.5073,
+        "ndist_mean": 3754.048
+      },
+      {
+        "ef": 320,
+        "recall": 0.9957800000000001,
+        "lat_mean_ms": 0.4742042299389141,
+        "lat_p50_ms": 0.4728500061901286,
+        "lat_p99_ms": 0.5896040072548204,
+        "hops_mean": 320.4267,
+        "ndist_mean": 4493.3379
+      },
+      {
+        "ef": 384,
+        "recall": 0.9968899999999999,
+        "lat_mean_ms": 0.5618667399161495,
+        "lat_p50_ms": 0.5561500147450715,
+        "lat_p99_ms": 0.7008009811397642,
+        "hops_mean": 384.3752,
+        "ndist_mean": 5201.4893
+      },
+      {
+        "ef": 512,
+        "recall": 0.99794,
+        "lat_mean_ms": 0.7121520100132329,
+        "lat_p50_ms": 0.7046499958960339,
+        "lat_p99_ms": 0.8959029824472965,
+        "hops_mean": 512.3062,
+        "ndist_mean": 6546.7188
+      }
+    ],
+    "upfront": [
+      {
+        "multiplier": 0.6,
+        "recall": 0.87192,
+        "lat_mean_ms": 0.10988560989499092,
+        "lat_p50_ms": 0.10049999400507659,
+        "lat_p99_ms": 0.1840010040905327,
+        "hops_mean": 36.5824,
+        "ndist_mean": 821.1508
+      },
+      {
+        "multiplier": 0.8,
+        "recall": 0.90676,
+        "lat_mean_ms": 0.1249822800862603,
+        "lat_p50_ms": 0.11359999189153314,
+        "lat_p99_ms": 0.22470399388112136,
+        "hops_mean": 47.143,
+        "ndist_mean": 1002.3111
+      },
+      {
+        "multiplier": 1.0,
+        "recall": 0.9303100000000001,
+        "lat_mean_ms": 0.14073489000438713,
+        "lat_p50_ms": 0.12779998360201716,
+        "lat_p99_ms": 0.2683010057080537,
+        "hops_mean": 58.0274,
+        "ndist_mean": 1182.3848
+      },
+      {
+        "multiplier": 1.2,
+        "recall": 0.94621,
+        "lat_mean_ms": 0.1570149099075934,
+        "lat_p50_ms": 0.1407999952789396,
+        "lat_p99_ms": 0.3062020032666624,
+        "hops_mean": 69.0757,
+        "ndist_mean": 1360.1491
+      },
+      {
+        "multiplier": 1.5,
+        "recall": 0.96222,
+        "lat_mean_ms": 0.184391409996897,
+        "lat_p50_ms": 0.16295000386890024,
+        "lat_p99_ms": 0.3672010017908178,
+        "hops_mean": 85.9258,
+        "ndist_mean": 1621.9611
+      },
+      {
+        "multiplier": 2.0,
+        "recall": 0.9766600000000001,
+        "lat_mean_ms": 0.22567352995974943,
+        "lat_p50_ms": 0.20149999181739986,
+        "lat_p99_ms": 0.4689999917172827,
+        "hops_mean": 114.6398,
+        "ndist_mean": 2049.6408
+      },
+      {
+        "multiplier": 2.5,
+        "recall": 0.98439,
+        "lat_mean_ms": 0.26925730991351887,
+        "lat_p50_ms": 0.24064999888651073,
+        "lat_p99_ms": 0.5694019992370158,
+        "hops_mean": 144.3744,
+        "ndist_mean": 2472.212
+      },
+      {
+        "multiplier": 3.0,
+        "recall": 0.9890399999999999,
+        "lat_mean_ms": 0.31568769985169637,
+        "lat_p50_ms": 0.2798999921651557,
+        "lat_p99_ms": 0.6736120066489095,
+        "hops_mean": 175.1063,
+        "ndist_mean": 2892.23
+      },
+      {
+        "multiplier": 4.0,
+        "recall": 0.99368,
+        "lat_mean_ms": 0.40176215997198594,
+        "lat_p50_ms": 0.3591999993659556,
+        "lat_p99_ms": 0.8484089991543444,
+        "hops_mean": 237.6328,
+        "ndist_mean": 3706.6067
+      },
+      {
+        "multiplier": 5.0,
+        "recall": 0.9955,
+        "lat_mean_ms": 0.47808480012754445,
+        "lat_p50_ms": 0.43649999133776873,
+        "lat_p99_ms": 0.9051020230981521,
+        "hops_mean": 295.609,
+        "ndist_mean": 4421.5592
+      }
+    ],
+    "checkpoint": [
+      {
+        "multiplier": 0.6,
+        "recall": 0.8594099999999999,
+        "lat_mean_ms": 0.10663733001856598,
+        "lat_p50_ms": 0.09640000644139946,
+        "lat_p99_ms": 0.18230299116112297,
+        "hops_mean": 33.7912,
+        "ndist_mean": 772.6085
+      },
+      {
+        "multiplier": 0.8,
+        "recall": 0.90438,
+        "lat_mean_ms": 0.1255490201408975,
+        "lat_p50_ms": 0.11330000415910035,
+        "lat_p99_ms": 0.22520399768836805,
+        "hops_mean": 45.1015,
+        "ndist_mean": 968.8768
+      },
+      {
+        "multiplier": 1.0,
+        "recall": 0.92993,
+        "lat_mean_ms": 0.143711159954546,
+        "lat_p50_ms": 0.12694999168161303,
+        "lat_p99_ms": 0.26770200114697223,
+        "hops_mean": 54.9305,
+        "ndist_mean": 1131.6569
+      },
+      {
+        "multiplier": 1.2,
+        "recall": 0.94522,
+        "lat_mean_ms": 0.16036356005643027,
+        "lat_p50_ms": 0.14244999329093844,
+        "lat_p99_ms": 0.3129999968223274,
+        "hops_mean": 64.3356,
+        "ndist_mean": 1284.2536
+      },
+      {
+        "multiplier": 1.5,
+        "recall": 0.96112,
+        "lat_mean_ms": 0.18899260007601698,
+        "lat_p50_ms": 0.1644000003580004,
+        "lat_p99_ms": 0.4020010051317513,
+        "hops_mean": 78.8198,
+        "ndist_mean": 1514.9832
+      },
+      {
+        "multiplier": 2.0,
+        "recall": 0.9762700000000001,
+        "lat_mean_ms": 0.2395858899340965,
+        "lat_p50_ms": 0.20405001123435795,
+        "lat_p99_ms": 0.5434020049870014,
+        "hops_mean": 102.9823,
+        "ndist_mean": 1889.4405
+      },
+      {
+        "multiplier": 2.5,
+        "recall": 0.9847699999999999,
+        "lat_mean_ms": 0.29091502021765336,
+        "lat_p50_ms": 0.25040000036824495,
+        "lat_p99_ms": 0.6899079855065795,
+        "hops_mean": 129.1607,
+        "ndist_mean": 2281.1708
+      },
+      {
+        "multiplier": 3.0,
+        "recall": 0.9890599999999999,
+        "lat_mean_ms": 0.34253867002553307,
+        "lat_p50_ms": 0.295000005280599,
+        "lat_p99_ms": 0.8228020078968257,
+        "hops_mean": 157.0426,
+        "ndist_mean": 2679.3727
+      },
+      {
+        "multiplier": 4.0,
+        "recall": 0.99375,
+        "lat_mean_ms": 0.44119775022845714,
+        "lat_p50_ms": 0.381799996830523,
+        "lat_p99_ms": 0.9854079945944252,
+        "hops_mean": 212.1883,
+        "ndist_mean": 3425.0884
+      },
+      {
+        "multiplier": 5.0,
+        "recall": 0.99555,
+        "lat_mean_ms": 0.5181703399779508,
+        "lat_p50_ms": 0.46239999937824905,
+        "lat_p99_ms": 0.9956999856512994,
+        "hops_mean": 260.4602,
+        "ndist_mean": 4040.6259
+      }
+    ]
+  },
+  "latency_at_recall": {
+    "0.9": {
+      "fixed-ef_ms": 0.10757571041373747,
+      "fixed-ef_ndist": 949.6665569641399,
+      "upfront_ms": 0.1218991552813354,
+      "upfront_reduction_pct": -13.314757404352505,
+      "upfront_ndist_reduction_pct": -1.5388791117168177,
+      "checkpoint_ms": 0.12356839183230216,
+      "checkpoint_reduction_pct": -14.8664427658034,
+      "checkpoint_ndist_reduction_pct": 0.20189863768634853
+    },
+    "0.95": {
+      "fixed-ef_ms": 0.15001372402173924,
+      "fixed-ef_ndist": 1398.9216806153174,
+      "upfront_ms": 0.1631039176481526,
+      "upfront_reduction_pct": -8.725997379090721,
+      "upfront_ndist_reduction_pct": -1.3658874893754946,
+      "checkpoint_ms": 0.16848152685162485,
+      "checkpoint_reduction_pct": -12.31074220063315,
+      "checkpoint_ndist_reduction_pct": 3.52170306353492
+    },
+    "0.98": {
+      "fixed-ef_ms": 0.23242768009229056,
+      "fixed-ef_ndist": 2212.384363043587,
+      "upfront_ms": 0.24356546148825783,
+      "upfront_reduction_pct": -4.7919341584206965,
+      "upfront_ndist_reduction_pct": -0.45976384676136295,
+      "checkpoint_ms": 0.2608892680982969,
+      "checkpoint_reduction_pct": -12.245352186411274,
+      "checkpoint_ndist_reduction_pct": 7.236058679179491
+    },
+    "0.99": {
+      "fixed-ef_ms": 0.3155812214887129,
+      "fixed-ef_ndist": 3029.4492258007544,
+      "upfront_ms": 0.33183491681808447,
+      "upfront_reduction_pct": -5.150400030995783,
+      "upfront_ndist_reduction_pct": -0.49881579569979184,
+      "checkpoint_ms": 0.3603638510109568,
+      "checkpoint_reduction_pct": -14.19052417345612,
+      "checkpoint_ndist_reduction_pct": 7.094236587238334
+    }
+  }
+}

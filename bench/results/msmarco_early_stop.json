@@ -1,0 +1,463 @@
+{
+  "experiment": "early_stop",
+  "config": {
+    "experiment": "early_stop",
+    "title": "MS MARCO 300k (MiniLM): learned early termination vs fixed ef",
+    "dataset": "msmarco300k",
+    "k": 10,
+    "threads": 16,
+    "warmup": 3,
+    "runs": 5,
+    "latency_cpu": 2,
+    "n_queries": 10000,
+    "index": {
+      "M": 16,
+      "ef_construction": 200,
+      "seed": 42
+    },
+    "training": {
+      "k": 10,
+      "n_train": 10000,
+      "ef_max": 512,
+      "probe": 16,
+      "probe_ef": 64,
+      "interval": 16,
+      "ef_min": 10,
+      "ef_grid": [
+        10,
+        12,
+        16,
+        20,
+        24,
+        32,
+        40,
+        48,
+        64,
+        80,
+        96,
+        128,
+        160,
+        192,
+        256,
+        384,
+        512
+      ],
+      "lightgbm": {
+        "num_rounds": 60,
+        "learning_rate": 0.1,
+        "num_leaves": 15,
+        "min_data_in_leaf": 50,
+        "num_threads": 8,
+        "seed": 42
+      }
+    },
+    "fixed_ef": [
+      16,
+      24,
+      32,
+      48,
+      64,
+      80,
+      96,
+      128,
+      160,
+      192,
+      256,
+      320,
+      384,
+      512
+    ],
+    "multipliers": [
+      0.6,
+      0.8,
+      1.0,
+      1.2,
+      1.5,
+      2.0,
+      2.5,
+      3.0,
+      4.0,
+      5.0
+    ],
+    "recall_targets": [
+      0.9,
+      0.95,
+      0.97,
+      0.98
+    ],
+    "plot_xmin": 0.85
+  },
+  "system": {
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13500HX",
+    "ram_gb": 31.7,
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14",
+    "numpy": "2.5.3",
+    "numba": "0.67.0",
+    "numba_threading_layer": null,
+    "threads": 1,
+    "faiss": "1.15.1"
+  },
+  "build": {
+    "build_s": 26.155505500006257,
+    "build_threads": 20,
+    "index_bytes": 501980192,
+    "graph_bytes": 41180192
+  },
+  "curves": {
+    "fixed-ef": [
+      {
+        "ef": 16,
+        "recall": 0.7214400000000001,
+        "lat_mean_ms": 0.07977938988769893,
+        "lat_p50_ms": 0.07410001126118004,
+        "lat_p99_ms": 0.13010100112296644,
+        "hops_mean": 20.2241,
+        "ndist_mean": 479.0874
+      },
+      {
+        "ef": 24,
+        "recall": 0.78695,
+        "lat_mean_ms": 0.10247910011385102,
+        "lat_p50_ms": 0.09499999578110874,
+        "lat_p99_ms": 0.1587999871117063,
+        "hops_mean": 28.1045,
+        "ndist_mean": 606.3235
+      },
+      {
+        "ef": 32,
+        "recall": 0.82546,
+        "lat_mean_ms": 0.12079919009702281,
+        "lat_p50_ms": 0.11359999189153314,
+        "lat_p99_ms": 0.18259999342262745,
+        "hops_mean": 35.881,
+        "ndist_mean": 727.9739
+      },
+      {
+        "ef": 48,
+        "recall": 0.87166,
+        "lat_mean_ms": 0.16226445993524977,
+        "lat_p50_ms": 0.15399997937493026,
+        "lat_p99_ms": 0.23790200706571346,
+        "hops_mean": 51.5746,
+        "ndist_mean": 965.17
+      },
+      {
+        "ef": 64,
+        "recall": 0.89886,
+        "lat_mean_ms": 0.20142175998771564,
+        "lat_p50_ms": 0.19099999917671084,
+        "lat_p99_ms": 0.2833010032190941,
+        "hops_mean": 67.2899,
+        "ndist_mean": 1193.4299
+      },
+      {
+        "ef": 80,
+        "recall": 0.91511,
+        "lat_mean_ms": 0.24070181001443414,
+        "lat_p50_ms": 0.22950000129640102,
+        "lat_p99_ms": 0.33080498687922966,
+        "hops_mean": 82.9738,
+        "ndist_mean": 1415.2042
+      },
+      {
+        "ef": 96,
+        "recall": 0.9271,
+        "lat_mean_ms": 0.27669305974559394,
+        "lat_p50_ms": 0.2655999851413071,
+        "lat_p99_ms": 0.37920300615951424,
+        "hops_mean": 98.7908,
+        "ndist_mean": 1633.7008
+      },
+      {
+        "ef": 128,
+        "recall": 0.94248,
+        "lat_mean_ms": 0.35002750980493147,
+        "lat_p50_ms": 0.33650000113993883,
+        "lat_p99_ms": 0.4644009855110198,
+        "hops_mean": 130.4073,
+        "ndist_mean": 2057.4898
+      },
+      {
+        "ef": 160,
+        "recall": 0.95346,
+        "lat_mean_ms": 0.42133217985683585,
+        "lat_p50_ms": 0.4073999880347401,
+        "lat_p99_ms": 0.5580009997356683,
+        "hops_mean": 162.1719,
+        "ndist_mean": 2469.9618
+      },
+      {
+        "ef": 192,
+        "recall": 0.96043,
+        "lat_mean_ms": 0.49380567998450714,
+        "lat_p50_ms": 0.4771999956574291,
+        "lat_p99_ms": 0.6549099809490146,
+        "hops_mean": 193.9039,
+        "ndist_mean": 2870.7278
+      },
+      {
+        "ef": 256,
+        "recall": 0.96854,
+        "lat_mean_ms": 0.6317815900954883,
+        "lat_p50_ms": 0.6082500040065497,
+        "lat_p99_ms": 0.8222000033129007,
+        "hops_mean": 257.5972,
+        "ndist_mean": 3649.5103
+      },
+      {
+        "ef": 320,
+        "recall": 0.97421,
+        "lat_mean_ms": 0.7707076699996832,
+        "lat_p50_ms": 0.7421999907819554,
+        "lat_p99_ms": 1.007901991251856,
+        "hops_mean": 321.439,
+        "ndist_mean": 4401.7668
+      },
+      {
+        "ef": 384,
+        "recall": 0.9776,
+        "lat_mean_ms": 0.8993544400000246,
+        "lat_p50_ms": 0.8710999973118305,
+        "lat_p99_ms": 1.180608996364754,
+        "hops_mean": 385.2844,
+        "ndist_mean": 5132.5875
+      },
+      {
+        "ef": 512,
+        "recall": 0.98302,
+        "lat_mean_ms": 1.1695956301206025,
+        "lat_p50_ms": 1.1252999975113198,
+        "lat_p99_ms": 1.5397039952222258,
+        "hops_mean": 513.1341,
+        "ndist_mean": 6545.3288
+      }
+    ],
+    "upfront": [
+      {
+        "multiplier": 0.6,
+        "recall": 0.86187,
+        "lat_mean_ms": 0.16779451997135766,
+        "lat_p50_ms": 0.1382000045850873,
+        "lat_p99_ms": 0.38882299180841123,
+        "hops_mean": 45.6579,
+        "ndist_mean": 907.3194
+      },
+      {
+        "multiplier": 0.8,
+        "recall": 0.8904,
+        "lat_mean_ms": 0.20062347007333303,
+        "lat_p50_ms": 0.16224999853875488,
+        "lat_p99_ms": 0.4846089938655498,
+        "hops_mean": 58.8702,
+        "ndist_mean": 1112.0291
+      },
+      {
+        "multiplier": 1.0,
+        "recall": 0.9113300000000001,
+        "lat_mean_ms": 0.2374712598073529,
+        "lat_p50_ms": 0.1883000077214092,
+        "lat_p99_ms": 0.5861099812318573,
+        "hops_mean": 72.4499,
+        "ndist_mean": 1316.0301
+      },
+      {
+        "multiplier": 1.2,
+        "recall": 0.9254200000000001,
+        "lat_mean_ms": 0.26965075003681704,
+        "lat_p50_ms": 0.2145000034943223,
+        "lat_p99_ms": 0.6796040231711232,
+        "hops_mean": 86.124,
+        "ndist_mean": 1515.6318
+      },
+      {
+        "multiplier": 1.5,
+        "recall": 0.9404299999999999,
+        "lat_mean_ms": 0.3204808499780483,
+        "lat_p50_ms": 0.25260000256821513,
+        "lat_p99_ms": 0.8194180109421727,
+        "hops_mean": 107.1227,
+        "ndist_mean": 1813.9389
+      },
+      {
+        "multiplier": 2.0,
+        "recall": 0.95488,
+        "lat_mean_ms": 0.40753957016277126,
+        "lat_p50_ms": 0.3213500021956861,
+        "lat_p99_ms": 1.0713080083951356,
+        "hops_mean": 143.0187,
+        "ndist_mean": 2305.3701
+      },
+      {
+        "multiplier": 2.5,
+        "recall": 0.9633900000000001,
+        "lat_mean_ms": 0.489004409944755,
+        "lat_p50_ms": 0.3889500076184049,
+        "lat_p99_ms": 1.2991019967012107,
+        "hops_mean": 179.647,
+        "ndist_mean": 2788.7198
+      },
+      {
+        "multiplier": 3.0,
+        "recall": 0.9688000000000001,
+        "lat_mean_ms": 0.5750121601333377,
+        "lat_p50_ms": 0.4594499769154936,
+        "lat_p99_ms": 1.4726079790852966,
+        "hops_mean": 215.7974,
+        "ndist_mean": 3251.9295
+      },
+      {
+        "multiplier": 4.0,
+        "recall": 0.97569,
+        "lat_mean_ms": 0.7176510001358111,
+        "lat_p50_ms": 0.5932000058237463,
+        "lat_p99_ms": 1.5364029991906136,
+        "hops_mean": 278.6552,
+        "ndist_mean": 4027.0782
+      },
+      {
+        "multiplier": 5.0,
+        "recall": 0.9788,
+        "lat_mean_ms": 0.8208828200178687,
+        "lat_p50_ms": 0.7212000055005774,
+        "lat_p99_ms": 1.556604007491842,
+        "hops_mean": 326.2364,
+        "ndist_mean": 4589.9044
+      }
+    ],
+    "checkpoint": [
+      {
+        "multiplier": 0.6,
+        "recall": 0.84977,
+        "lat_mean_ms": 0.15966129997977987,
+        "lat_p50_ms": 0.13154999760445207,
+        "lat_p99_ms": 0.37580300908302894,
+        "hops_mean": 41.6979,
+        "ndist_mean": 845.3986
+      },
+      {
+        "multiplier": 0.8,
+        "recall": 0.88504,
+        "lat_mean_ms": 0.19461453005787918,
+        "lat_p50_ms": 0.1613000058569014,
+        "lat_p99_ms": 0.47970701445592584,
+        "hops_mean": 54.3105,
+        "ndist_mean": 1041.0659
+      },
+      {
+        "multiplier": 1.0,
+        "recall": 0.907,
+        "lat_mean_ms": 0.2287592700420646,
+        "lat_p50_ms": 0.185950004379265,
+        "lat_p99_ms": 0.5898019802407362,
+        "hops_mean": 66.7625,
+        "ndist_mean": 1227.3691
+      },
+      {
+        "multiplier": 1.2,
+        "recall": 0.92189,
+        "lat_mean_ms": 0.2635977998637827,
+        "lat_p50_ms": 0.20989999757148325,
+        "lat_p99_ms": 0.7098019914701581,
+        "hops_mean": 78.9329,
+        "ndist_mean": 1405.9297
+      },
+      {
+        "multiplier": 1.5,
+        "recall": 0.93699,
+        "lat_mean_ms": 0.3160378798871534,
+        "lat_p50_ms": 0.24629999825265259,
+        "lat_p99_ms": 0.8829260000493383,
+        "hops_mean": 96.9833,
+        "ndist_mean": 1665.122
+      },
+      {
+        "multiplier": 2.0,
+        "recall": 0.9512600000000001,
+        "lat_mean_ms": 0.40054680990288033,
+        "lat_p50_ms": 0.31469998066313565,
+        "lat_p99_ms": 1.139307002304122,
+        "hops_mean": 127.3752,
+        "ndist_mean": 2088.1433
+      },
+      {
+        "multiplier": 2.5,
+        "recall": 0.9601000000000001,
+        "lat_mean_ms": 0.48750416001130364,
+        "lat_p50_ms": 0.38655000389553607,
+        "lat_p99_ms": 1.4104120002593847,
+        "hops_mean": 158.673,
+        "ndist_mean": 2508.6044
+      },
+      {
+        "multiplier": 3.0,
+        "recall": 0.96595,
+        "lat_mean_ms": 0.5660042899224209,
+        "lat_p50_ms": 0.450249994173646,
+        "lat_p99_ms": 1.5405130010913128,
+        "hops_mean": 190.2359,
+        "ndist_mean": 2921.3705
+      },
+      {
+        "multiplier": 4.0,
+        "recall": 0.97316,
+        "lat_mean_ms": 0.7051104300247971,
+        "lat_p50_ms": 0.5788999842479825,
+        "lat_p99_ms": 1.5974019980058074,
+        "hops_mean": 247.7351,
+        "ndist_mean": 3646.1993
+      },
+      {
+        "multiplier": 5.0,
+        "recall": 0.97693,
+        "lat_mean_ms": 0.8188142399216304,
+        "lat_p50_ms": 0.7097499910742044,
+        "lat_p99_ms": 1.6121999942697585,
+        "hops_mean": 296.8399,
+        "ndist_mean": 4241.7901
+      }
+    ]
+  },
+  "latency_at_recall": {
+    "0.9": {
+      "fixed-ef_ms": 0.20395501936719243,
+      "fixed-ef_ndist": 1207.785624090255,
+      "upfront_ms": 0.21675541628542716,
+      "upfront_reduction_pct": -6.276088207071484,
+      "upfront_ndist_reduction_pct": 0.5332370673041487,
+      "checkpoint_ms": 0.21727039618726923,
+      "checkpoint_reduction_pct": -6.5285850092781095,
+      "checkpoint_ndist_reduction_pct": 3.5738430979290525
+    },
+    "0.95": {
+      "fixed-ef_ms": 0.3974207368882998,
+      "fixed-ef_ndist": 2331.765055646229,
+      "upfront_ms": 0.37577087294625994,
+      "upfront_reduction_pct": 5.44759292420236,
+      "upfront_ndist_reduction_pct": 8.82127307227768,
+      "checkpoint_ms": 0.39225298261148994,
+      "checkpoint_reduction_pct": 1.3003232587388447,
+      "checkpoint_ndist_reduction_pct": 12.22018837057296
+    },
+    "0.97": {
+      "fixed-ef_ms": 0.6649587190434976,
+      "fixed-ef_ndist": 3829.947204430261,
+      "upfront_ms": 0.597637805308911,
+      "upfront_reduction_pct": 10.124074142741312,
+      "upfront_ndist_reduction_pct": 11.870884216260603,
+      "checkpoint_ms": 0.6403668067255444,
+      "checkpoint_reduction_pct": 3.6982615031091237,
+      "checkpoint_ndist_reduction_pct": 13.610392589271713
+    },
+    "0.98": {
+      "fixed-ef_ms": 1.0103155041090204,
+      "fixed-ef_ndist": 5716.027933136614,
+      "upfront_ms": null,
+      "upfront_reduction_pct": null,
+      "upfront_ndist_reduction_pct": null,
+      "checkpoint_ms": null,
+      "checkpoint_reduction_pct": null,
+      "checkpoint_ndist_reduction_pct": null
+    }
+  }
+}
