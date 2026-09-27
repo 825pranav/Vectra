@@ -131,10 +131,14 @@ class _Parser:
     def peek(self) -> str:
         return self.toks[self.i][0]
 
+    _NAMES = {"lit": "a value", "ident": "an attribute name", "end": "end of input"}
+
     def take(self, kind: str) -> Any:
         k, v = self.toks[self.i]
         if k != kind:
-            raise FilterError(f"expected {kind}, found {v if v is not None else 'end of input'}")
+            want = self._NAMES.get(kind, repr(kind))
+            found = "end of input" if k == "end" else repr(v)
+            raise FilterError(f"expected {want}, found {found}")
         self.i += 1
         return v
 
