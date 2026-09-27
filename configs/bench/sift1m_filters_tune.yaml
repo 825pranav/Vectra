@@ -1,0 +1,23 @@
+# Tune the planner's selectivity thresholds on LEARN queries (never the test split).
+#   python -m bench.run configs/bench/sift1m_filters_tune.yaml
+# Recommends the fastest (brute_force_max, post_filter_min) whose mean recall@10
+# meets min_recall; that pair is what configs/index/default.yaml ships.
+experiment: filters
+mode: tune
+dataset: sift1m
+seed: 7
+n_categories: 50
+k: 10
+ef: 64
+threads: 16
+warmup: 1
+runs: 3
+latency_cpu: 2         # pin timing to one P-core (hybrid CPU)
+n_queries: 1000
+min_recall: 0.95       # at least unfiltered HNSW's recall at the same ef (~0.94)
+grid:
+  brute_force_max_selectivity: [0.005, 0.01, 0.02, 0.03, 0.05]
+  post_filter_min_selectivity: [0.1, 0.2, 0.3, 0.5, 0.7, 0.9]
+collection:
+  hnsw.M: 16
+  hnsw.ef_construction: 200

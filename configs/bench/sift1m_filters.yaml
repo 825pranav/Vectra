@@ -1,0 +1,19 @@
+# Filtered search on SIFT1M with synthetic attributes: planner vs fixed strategies.
+#   python -m bench.run configs/bench/sift1m_filters.yaml
+experiment: filters
+title: "SIFT1M filtered search: latency by filter selectivity"
+dataset: sift1m
+seed: 7
+n_categories: 50
+k: 10
+ef: 64
+threads: 16            # only for the initial bulk load
+warmup: 3
+runs: 5
+latency_cpu: 2         # pin timing to one P-core (hybrid CPU)
+n_queries: 1000        # test queries, each paired with one random predicate
+# planner thresholds: whatever configs/index/default.yaml ships (tuned by *_tune.yaml)
+buckets: [0.0, 0.0001, 0.001, 0.01, 0.03, 0.1, 0.3, 0.6, 1.01]
+collection:
+  hnsw.M: 16
+  hnsw.ef_construction: 200

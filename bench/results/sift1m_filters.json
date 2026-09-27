@@ -1,0 +1,251 @@
+{
+  "experiment": "filters",
+  "config": {
+    "experiment": "filters",
+    "title": "SIFT1M filtered search: latency by filter selectivity",
+    "dataset": "sift1m",
+    "seed": 7,
+    "n_categories": 50,
+    "k": 10,
+    "ef": 64,
+    "threads": 16,
+    "warmup": 3,
+    "runs": 5,
+    "latency_cpu": 2,
+    "n_queries": 1000,
+    "buckets": [
+      0.0,
+      0.0001,
+      0.001,
+      0.01,
+      0.03,
+      0.1,
+      0.3,
+      0.6,
+      1.01
+    ],
+    "collection": {
+      "hnsw.M": 16,
+      "hnsw.ef_construction": 200
+    }
+  },
+  "system": {
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13500HX",
+    "ram_gb": 31.7,
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14",
+    "numpy": "2.5.3",
+    "numba": "0.67.0",
+    "numba_threading_layer": null,
+    "threads": 1,
+    "faiss": "1.15.1"
+  },
+  "planner_config": {
+    "brute_force_max_selectivity": 0.02,
+    "post_filter_min_selectivity": 0.1,
+    "post_filter_max_ef": 1024,
+    "mask_cache_size": 64,
+    "exact_selectivity_below": 50000,
+    "stats_refresh_fraction": 0.1
+  },
+  "test": {
+    "overall": {
+      "post_filter": {
+        "mean_ms": 0.7873975996335503,
+        "p99_ms": 1.6913619855768047,
+        "recall": 0.6553428571428571
+      },
+      "bitmap": {
+        "mean_ms": 53.60176720059826,
+        "p99_ms": 430.3834160158294,
+        "recall": 0.987875
+      },
+      "brute_force": {
+        "mean_ms": 8.879355400335044,
+        "p99_ms": 29.468137992662378,
+        "recall": 0.9999
+      },
+      "planner": {
+        "mean_ms": 0.8383013996644877,
+        "p99_ms": 2.9221270012203586,
+        "recall": 0.968
+      }
+    },
+    "buckets": [
+      {
+        "lo": 0.0,
+        "hi": 0.0001,
+        "queries": 105,
+        "post_filter": {
+          "mean_ms": 1.329349523266068,
+          "recall": 0.004217687074829932
+        },
+        "bitmap": {
+          "mean_ms": 420.29904952561037,
+          "recall": 0.9988095238095238
+        },
+        "brute_force": {
+          "mean_ms": 1.1461828585847147,
+          "recall": 1.0
+        },
+        "planner": {
+          "mean_ms": 0.9882790477214647,
+          "recall": 1.0
+        }
+      },
+      {
+        "lo": 0.0001,
+        "hi": 0.001,
+        "queries": 80,
+        "post_filter": {
+          "mean_ms": 1.3120937506755581,
+          "recall": 0.0925
+        },
+        "bitmap": {
+          "mean_ms": 55.7566287508962,
+          "recall": 1.0
+        },
+        "brute_force": {
+          "mean_ms": 0.8657562495500315,
+          "recall": 1.0
+        },
+        "planner": {
+          "mean_ms": 0.7330575015657814,
+          "recall": 1.0
+        }
+      },
+      {
+        "lo": 0.001,
+        "hi": 0.01,
+        "queries": 214,
+        "post_filter": {
+          "mean_ms": 1.3557934586043583,
+          "recall": 0.4238317757009346
+        },
+        "bitmap": {
+          "mean_ms": 18.707831309690516,
+          "recall": 1.0
+        },
+        "brute_force": {
+          "mean_ms": 1.1711294401576307,
+          "recall": 1.0
+        },
+        "planner": {
+          "mean_ms": 1.0025803727058642,
+          "recall": 1.0
+        }
+      },
+      {
+        "lo": 0.01,
+        "hi": 0.03,
+        "queries": 91,
+        "post_filter": {
+          "mean_ms": 1.2538868138837822,
+          "recall": 0.942857142857143
+        },
+        "bitmap": {
+          "mean_ms": 4.52096263716857,
+          "recall": 0.998901098901099
+        },
+        "brute_force": {
+          "mean_ms": 1.841423078056343,
+          "recall": 1.0
+        },
+        "planner": {
+          "mean_ms": 1.7215956033176774,
+          "recall": 1.0
+        }
+      },
+      {
+        "lo": 0.03,
+        "hi": 0.1,
+        "queries": 125,
+        "post_filter": {
+          "mean_ms": 0.4902999980840832,
+          "recall": 0.9472
+        },
+        "bitmap": {
+          "mean_ms": 1.7114407997578382,
+          "recall": 0.996
+        },
+        "brute_force": {
+          "mean_ms": 4.1829519991297275,
+          "recall": 1.0
+        },
+        "planner": {
+          "mean_ms": 1.6944760002661496,
+          "recall": 0.996
+        }
+      },
+      {
+        "lo": 0.1,
+        "hi": 0.3,
+        "queries": 103,
+        "post_filter": {
+          "mean_ms": 0.2253145624847305,
+          "recall": 0.9203883495145634
+        },
+        "bitmap": {
+          "mean_ms": 0.9825330089723456,
+          "recall": 0.9922330097087378
+        },
+        "brute_force": {
+          "mean_ms": 9.804516505434187,
+          "recall": 0.9990291262135923
+        },
+        "planner": {
+          "mean_ms": 0.295921358239195,
+          "recall": 0.9291262135922331
+        }
+      },
+      {
+        "lo": 0.3,
+        "hi": 0.6,
+        "queries": 129,
+        "post_filter": {
+          "mean_ms": 0.1937255801185388,
+          "recall": 0.9147286821705426
+        },
+        "bitmap": {
+          "mean_ms": 1.0375666687925629,
+          "recall": 0.972093023255814
+        },
+        "brute_force": {
+          "mean_ms": 20.983248836922193,
+          "recall": 1.0
+        },
+        "planner": {
+          "mean_ms": 0.22322092951607508,
+          "recall": 0.9147286821705426
+        }
+      },
+      {
+        "lo": 0.6,
+        "hi": 1.01,
+        "queries": 153,
+        "post_filter": {
+          "mean_ms": 0.1903228751639379,
+          "recall": 0.9137254901960785
+        },
+        "bitmap": {
+          "mean_ms": 0.954092156295695,
+          "recall": 0.954248366013072
+        },
+        "brute_force": {
+          "mean_ms": 26.35281830071167,
+          "recall": 1.0
+        },
+        "planner": {
+          "mean_ms": 0.21951111129430287,
+          "recall": 0.9137254901960785
+        }
+      }
+    ],
+    "planner_choices": {
+      "bitmap": 133,
+      "brute_force": 482,
+      "post_filter": 381,
+      "post_filter+bitmap": 4
+    }
+  }
+}

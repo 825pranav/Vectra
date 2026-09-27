@@ -1,0 +1,238 @@
+{
+  "experiment": "filters",
+  "config": {
+    "experiment": "filters",
+    "mode": "tune",
+    "dataset": "sift1m",
+    "seed": 7,
+    "n_categories": 50,
+    "k": 10,
+    "ef": 64,
+    "threads": 16,
+    "warmup": 1,
+    "runs": 3,
+    "latency_cpu": 2,
+    "n_queries": 1000,
+    "min_recall": 0.95,
+    "grid": {
+      "brute_force_max_selectivity": [
+        0.005,
+        0.01,
+        0.02,
+        0.03,
+        0.05
+      ],
+      "post_filter_min_selectivity": [
+        0.1,
+        0.2,
+        0.3,
+        0.5,
+        0.7,
+        0.9
+      ]
+    },
+    "collection": {
+      "hnsw.M": 16,
+      "hnsw.ef_construction": 200
+    }
+  },
+  "system": {
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13500HX",
+    "ram_gb": 31.7,
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14",
+    "numpy": "2.5.3",
+    "numba": "0.67.0",
+    "numba_threading_layer": null,
+    "threads": 1,
+    "faiss": "1.15.1"
+  },
+  "grid": [
+    {
+      "brute_force_max_selectivity": 0.005,
+      "post_filter_min_selectivity": 0.1,
+      "mean_ms": 1.66028979991097,
+      "recall": 0.9716000000000001
+    },
+    {
+      "brute_force_max_selectivity": 0.005,
+      "post_filter_min_selectivity": 0.2,
+      "mean_ms": 1.6790469003026374,
+      "recall": 0.9738
+    },
+    {
+      "brute_force_max_selectivity": 0.005,
+      "post_filter_min_selectivity": 0.3,
+      "mean_ms": 1.7289954002189916,
+      "recall": 0.9789
+    },
+    {
+      "brute_force_max_selectivity": 0.005,
+      "post_filter_min_selectivity": 0.5,
+      "mean_ms": 1.7409959005599376,
+      "recall": 0.9823
+    },
+    {
+      "brute_force_max_selectivity": 0.005,
+      "post_filter_min_selectivity": 0.7,
+      "mean_ms": 1.9074575004633516,
+      "recall": 0.99
+    },
+    {
+      "brute_force_max_selectivity": 0.005,
+      "post_filter_min_selectivity": 0.9,
+      "mean_ms": 1.9151316999923438,
+      "recall": 0.9906
+    },
+    {
+      "brute_force_max_selectivity": 0.01,
+      "post_filter_min_selectivity": 0.1,
+      "mean_ms": 1.03052779979771,
+      "recall": 0.9716000000000001
+    },
+    {
+      "brute_force_max_selectivity": 0.01,
+      "post_filter_min_selectivity": 0.2,
+      "mean_ms": 1.0645201997249387,
+      "recall": 0.9738
+    },
+    {
+      "brute_force_max_selectivity": 0.01,
+      "post_filter_min_selectivity": 0.3,
+      "mean_ms": 1.1071254004200455,
+      "recall": 0.9789
+    },
+    {
+      "brute_force_max_selectivity": 0.01,
+      "post_filter_min_selectivity": 0.5,
+      "mean_ms": 1.1366612002893817,
+      "recall": 0.9823
+    },
+    {
+      "brute_force_max_selectivity": 0.01,
+      "post_filter_min_selectivity": 0.7,
+      "mean_ms": 1.2709065004310105,
+      "recall": 0.99
+    },
+    {
+      "brute_force_max_selectivity": 0.01,
+      "post_filter_min_selectivity": 0.9,
+      "mean_ms": 1.2790031001786701,
+      "recall": 0.9906
+    },
+    {
+      "brute_force_max_selectivity": 0.02,
+      "post_filter_min_selectivity": 0.1,
+      "mean_ms": 0.7739421000296716,
+      "recall": 0.9717
+    },
+    {
+      "brute_force_max_selectivity": 0.02,
+      "post_filter_min_selectivity": 0.2,
+      "mean_ms": 0.8229352006746922,
+      "recall": 0.9739
+    },
+    {
+      "brute_force_max_selectivity": 0.02,
+      "post_filter_min_selectivity": 0.3,
+      "mean_ms": 0.8861394995183218,
+      "recall": 0.979
+    },
+    {
+      "brute_force_max_selectivity": 0.02,
+      "post_filter_min_selectivity": 0.5,
+      "mean_ms": 0.8814061000011861,
+      "recall": 0.9823999999999999
+    },
+    {
+      "brute_force_max_selectivity": 0.02,
+      "post_filter_min_selectivity": 0.7,
+      "mean_ms": 1.0180559003492817,
+      "recall": 0.9901
+    },
+    {
+      "brute_force_max_selectivity": 0.02,
+      "post_filter_min_selectivity": 0.9,
+      "mean_ms": 1.057494099921314,
+      "recall": 0.9907
+    },
+    {
+      "brute_force_max_selectivity": 0.03,
+      "post_filter_min_selectivity": 0.1,
+      "mean_ms": 0.8592390997509938,
+      "recall": 0.9717
+    },
+    {
+      "brute_force_max_selectivity": 0.03,
+      "post_filter_min_selectivity": 0.2,
+      "mean_ms": 0.8171092999109533,
+      "recall": 0.9739
+    },
+    {
+      "brute_force_max_selectivity": 0.03,
+      "post_filter_min_selectivity": 0.3,
+      "mean_ms": 0.8631461997574661,
+      "recall": 0.979
+    },
+    {
+      "brute_force_max_selectivity": 0.03,
+      "post_filter_min_selectivity": 0.5,
+      "mean_ms": 0.8780639999604318,
+      "recall": 0.9823999999999999
+    },
+    {
+      "brute_force_max_selectivity": 0.03,
+      "post_filter_min_selectivity": 0.7,
+      "mean_ms": 1.013528800191125,
+      "recall": 0.9901
+    },
+    {
+      "brute_force_max_selectivity": 0.03,
+      "post_filter_min_selectivity": 0.9,
+      "mean_ms": 1.0356619993108325,
+      "recall": 0.9907
+    },
+    {
+      "brute_force_max_selectivity": 0.05,
+      "post_filter_min_selectivity": 0.1,
+      "mean_ms": 0.8351618009328377,
+      "recall": 0.9718000000000001
+    },
+    {
+      "brute_force_max_selectivity": 0.05,
+      "post_filter_min_selectivity": 0.2,
+      "mean_ms": 0.8741220999509096,
+      "recall": 0.974
+    },
+    {
+      "brute_force_max_selectivity": 0.05,
+      "post_filter_min_selectivity": 0.3,
+      "mean_ms": 0.9618335005361587,
+      "recall": 0.9790999999999999
+    },
+    {
+      "brute_force_max_selectivity": 0.05,
+      "post_filter_min_selectivity": 0.5,
+      "mean_ms": 0.9627374001429416,
+      "recall": 0.9825
+    },
+    {
+      "brute_force_max_selectivity": 0.05,
+      "post_filter_min_selectivity": 0.7,
+      "mean_ms": 1.085574299824657,
+      "recall": 0.9902000000000001
+    },
+    {
+      "brute_force_max_selectivity": 0.05,
+      "post_filter_min_selectivity": 0.9,
+      "mean_ms": 1.095504501106916,
+      "recall": 0.9907999999999999
+    }
+  ],
+  "recommended": {
+    "brute_force_max_selectivity": 0.02,
+    "post_filter_min_selectivity": 0.1,
+    "mean_ms": 0.7739421000296716,
+    "recall": 0.9717
+  }
+}
