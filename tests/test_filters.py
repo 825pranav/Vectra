@@ -241,7 +241,7 @@ def test_planner_picks_by_selectivity(filtered):
     q = np.zeros(16, np.float32)
     assert col.search(q, k=5, filter="price >= 0").strategy.startswith("post_filter")
     assert col.search(q, k=5, filter="price == 7 AND cat == 'belts'").strategy == "brute_force"
-    assert col.search(q, k=5, filter="cat == 'hats'").strategy == "bitmap"
+    assert col.search(q, k=5, filter="cat == 'socks'").strategy == "bitmap"  # ~7% match
 
 
 def test_filter_errors_are_invalid_argument(filtered):
