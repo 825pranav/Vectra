@@ -451,25 +451,40 @@ L 519.48 290.630469
 " style="fill: none; stroke: #c3c2b7; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
    </g>
    <g id="text_13">
-    <text style="font-size: 9px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="160.881042" y="187.2219" transform="rotate(-0 160.881042 187.2219)">checkpoint</text>
-   </g>
-   <g id="text_14">
-    <text style="font-size: 9px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="87.799814" y="228.395224" transform="rotate(-0 87.799814 228.395224)">upfront</text>
-   </g>
-   <g id="text_15">
-    <text style="font-size: 9px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="118.678762" y="203.758798" transform="rotate(-0 118.678762 203.758798)">fixed-ef</text>
-   </g>
-   <g id="text_16">
     <text style="font-size: 8px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #898781" x="204.066849" y="30.63252" transform="rotate(-0 204.066849 30.63252)"> 0.9</text>
    </g>
-   <g id="text_17">
+   <g id="text_14">
     <text style="font-size: 8px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #898781" x="361.773424" y="30.63252" transform="rotate(-0 361.773424 30.63252)"> 0.95</text>
    </g>
-   <g id="text_18">
+   <g id="text_15">
     <text style="font-size: 8px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #898781" x="424.856055" y="30.63252" transform="rotate(-0 424.856055 30.63252)"> 0.97</text>
    </g>
-   <g id="text_19">
+   <g id="text_16">
     <text style="font-size: 8px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #898781" x="456.39737" y="30.63252" transform="rotate(-0 456.39737 30.63252)"> 0.98</text>
+   </g>
+   <g id="patch_5">
+    <path d="M 450.737024 69.552827 
+Q 449.717564 69.407731 448.698105 69.262635 
+" style="fill: none; stroke: #e87ba4; stroke-width: 0.8; stroke-linecap: round"/>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 9px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="454.714186" y="75.509154" transform="rotate(-0 454.714186 75.509154)">checkpoint</text>
+   </g>
+   <g id="patch_6">
+    <path d="M 456.73482 67.227615 
+Q 455.609612 67.644021 454.484404 68.060428 
+" style="fill: none; stroke: #eb6834; stroke-width: 0.8; stroke-linecap: round"/>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 9px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="460.612412" y="62.632462" transform="rotate(-0 460.612412 62.632462)">upfront</text>
+   </g>
+   <g id="patch_7">
+    <path d="M 469.956693 37.629316 
+Q 468.922626 37.440083 467.888559 37.25085 
+" style="fill: none; stroke: #2a78d6; stroke-width: 0.8; stroke-linecap: round"/>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 9px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #52514e" x="473.922847" y="43.5558" transform="rotate(-0 473.922847 43.5558)">fixed-ef</text>
    </g>
    <g id="text_20">
     <text style="font-size: 11px; font-family: 'Segoe UI', 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="46.360273" y="18.808301" transform="rotate(-0 46.360273 18.808301)">MS MARCO 300k (MiniLM): learned early termination vs fixed ef</text>
