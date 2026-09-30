@@ -328,6 +328,10 @@ db.search("products", vecs[0], k=5, filter='price < 500 AND category == "shoes"'
           include_attributes=True)
 ```
 
+For a guided tour (50k real passages, semantic and filtered search over gRPC, a
+delete, error codes, and live kill -9 recovery), run `uv run python -m examples.demo`
+after `bench.datasets.msmarco` (needs the `data` extra for query embedding).
+
 Engine errors come back as gRPC status codes: `INVALID_ARGUMENT` (bad
 dimension, filter or attribute type), `NOT_FOUND`, `ALREADY_EXISTS`. The engine
 can also be embedded directly (`engine.collection.Collection`), and there is an
