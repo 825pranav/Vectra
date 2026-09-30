@@ -1,5 +1,5 @@
 [project]
-name = "siftdb"
+name = "vectra"
 version = "0.1.0"
 description = "A vector database built from scratch: HNSW, product quantization, filtered search, WAL durability and learned early termination, in Python + Numba."
 readme = "README.md"

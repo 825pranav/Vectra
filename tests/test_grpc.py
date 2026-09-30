@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 
 from api.server import serve
-from proto import siftdb_pb2 as pb
-from proto import siftdb_pb2_grpc as pb_grpc
+from proto import vectra_pb2 as pb
+from proto import vectra_pb2_grpc as pb_grpc
 
 
 @pytest.fixture(scope="module")
@@ -14,7 +14,7 @@ def stub(tmp_path_factory):
     root = tmp_path_factory.mktemp("grpc_root")
     server, servicer, port = serve(root, port=0)  # OS-assigned port
     channel = grpc.insecure_channel(f"127.0.0.1:{port}")
-    yield pb_grpc.SiftDBStub(channel)
+    yield pb_grpc.VectraStub(channel)
     channel.close()
     server.stop(grace=None)
     servicer.close()

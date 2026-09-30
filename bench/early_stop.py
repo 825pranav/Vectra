@@ -123,7 +123,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     Q, gt = ds["query"], ds["gt"][:, :k]
     if cfg.get("n_queries"):
         Q, gt = Q[: cfg["n_queries"]], gt[: cfg["n_queries"]]
-    eng = SiftdbHNSW({"name": "siftdb-hnsw", **cfg["index"]}, ds, cfg["dataset"])
+    eng = SiftdbHNSW({"name": "vectra-hnsw", **cfg["index"]}, ds, cfg["dataset"])
     build = eng.build(bool(cfg.get("rebuild", False)))
     index = eng.index
     models = _models(cfg, index, base, ds["learn"], cfg["dataset"])
@@ -177,8 +177,8 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     return out
 
 
-VARIANT_COLORS = {"fixed-ef": COLORS["siftdb-hnsw"], "upfront": COLORS["faiss-hnsw"],
-                  "checkpoint": COLORS["siftdb-hnsw-es"]}  # fmt: skip
+VARIANT_COLORS = {"fixed-ef": COLORS["vectra-hnsw"], "upfront": COLORS["faiss-hnsw"],
+                  "checkpoint": COLORS["vectra-hnsw-es"]}  # fmt: skip
 
 
 def plot(out, name, title, k, targets, xmin: float | None = None) -> None:

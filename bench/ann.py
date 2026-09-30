@@ -1,4 +1,4 @@
-"""Recall@k vs QPS curves for siftdb and FAISS engines on one dataset.
+"""Recall@k vs QPS curves for vectra and FAISS engines on one dataset.
 
     python -m bench.run configs/bench/sift1m_hnsw.yaml
 
@@ -96,7 +96,7 @@ class SiftdbHNSW(Engine):
     def cache_stem(self) -> str:
         s = self.spec
         seed = s.get("seed", 42)
-        return f"{self.dataset}_siftdb_hnsw_M{s['M']}_efc{s['ef_construction']}_seed{seed}"
+        return f"{self.dataset}_vectra_hnsw_M{s['M']}_efc{s['ef_construction']}_seed{seed}"
 
     def build(self, rebuild: bool) -> dict[str, Any]:
         s = self.spec
@@ -133,7 +133,7 @@ class SiftdbHNSW(Engine):
 
 
 class SiftdbHNSWPQ(SiftdbHNSW):
-    """Same graph as siftdb-hnsw, traversed on PQ codes, exact re-rank of
+    """Same graph as vectra-hnsw, traversed on PQ codes, exact re-rank of
     ``rerank_factor * ef`` candidates from the full-precision vectors."""
 
     def build(self, rebuild: bool) -> dict[str, Any]:
@@ -141,7 +141,7 @@ class SiftdbHNSWPQ(SiftdbHNSW):
 
         meta = super().build(rebuild)
         s = self.spec
-        stem = f"{self.dataset}_siftdb_pq_m{s['m']}_n{s['train_size']}_seed{s.get('seed', 42)}"
+        stem = f"{self.dataset}_vectra_pq_m{s['m']}_n{s['train_size']}_seed{s.get('seed', 42)}"
         path = CACHE / f"{stem}.npz"
         self.pq = ProductQuantizer(self.dim, m=s["m"], iters=s.get("kmeans_iters", 20),
                                    seed=s.get("seed", 42))  # fmt: skip
@@ -301,8 +301,8 @@ class FaissIVFPQ(Engine):
 
 
 ENGINES: dict[str, type[Engine]] = {
-    "siftdb_hnsw": SiftdbHNSW,
-    "siftdb_hnsw_pq": SiftdbHNSWPQ,
+    "vectra_hnsw": SiftdbHNSW,
+    "vectra_hnsw_pq": SiftdbHNSWPQ,
     "faiss_hnsw": FaissHNSW,
     "faiss_ivfpq": FaissIVFPQ,
 }

@@ -1,7 +1,7 @@
 """Optional REST gateway for demos: JSON over HTTP -> the same collections.
 
     uv sync --extra rest
-    uvicorn api.rest:create_app --factory --port 8080   # serves $SIFTDB_ROOT
+    uvicorn api.rest:create_app --factory --port 8080   # serves $VECTRA_ROOT
 
 It talks to the engine in-process (not through gRPC) and maps engine errors to
 HTTP 400/404/409, mirroring the gRPC status codes.
@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from engine.collection import Collection, InvalidArgument
 
-ROOT = Path(os.environ.get("SIFTDB_ROOT", "data/collections"))
+ROOT = Path(os.environ.get("VECTRA_ROOT", "data/collections"))
 
 
 class CreateBody(BaseModel):
@@ -66,7 +66,7 @@ def create_app(root: Path = ROOT) -> FastAPI:
         for c in cols.values():  # clean shutdown snapshots each collection
             c.close()
 
-    app = FastAPI(title="siftdb", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="vectra", version="0.1.0", lifespan=lifespan)
 
     def get(name: str) -> Collection:
         if name not in cols:

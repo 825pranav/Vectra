@@ -17,8 +17,8 @@
     "plot_xmin": 0.5,
     "engines": [
       {
-        "name": "siftdb-hnsw",
-        "kind": "siftdb_hnsw",
+        "name": "vectra-hnsw",
+        "kind": "vectra_hnsw",
         "M": 16,
         "ef_construction": 200,
         "seed": 42,
@@ -34,8 +34,8 @@
         ]
       },
       {
-        "name": "siftdb-hnsw-pq",
-        "kind": "siftdb_hnsw_pq",
+        "name": "vectra-hnsw-pq",
+        "kind": "vectra_hnsw_pq",
         "M": 16,
         "ef_construction": 200,
         "seed": 42,
@@ -107,8 +107,8 @@
   },
   "engines": [
     {
-      "name": "siftdb-hnsw",
-      "kind": "siftdb_hnsw",
+      "name": "vectra-hnsw",
+      "kind": "vectra_hnsw",
       "build_s": 45.7797763000126,
       "build_threads": 16,
       "index_bytes": 649258752,
@@ -237,8 +237,8 @@
       ]
     },
     {
-      "name": "siftdb-hnsw-pq",
-      "kind": "siftdb_hnsw_pq",
+      "name": "vectra-hnsw-pq",
+      "kind": "vectra_hnsw_pq",
       "build_s": 65.18585980002536,
       "build_threads": 16,
       "index_bytes": 153389824,
@@ -646,14 +646,14 @@
   ],
   "qps_at_recall": {
     "0.9": {
-      "siftdb-hnsw": 68404.59620918201,
-      "siftdb-hnsw-pq": 65347.82867184782,
+      "vectra-hnsw": 68404.59620918201,
+      "vectra-hnsw-pq": 65347.82867184782,
       "faiss-ivfpq": null,
       "faiss-ivfpq-refine": 26440.7422674499
     },
     "0.95": {
-      "siftdb-hnsw": 43919.37072646357,
-      "siftdb-hnsw-pq": 40932.128003435275,
+      "vectra-hnsw": 43919.37072646357,
+      "vectra-hnsw-pq": 40932.128003435275,
       "faiss-ivfpq": null,
       "faiss-ivfpq-refine": null
     }

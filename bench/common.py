@@ -26,11 +26,11 @@ CACHE = ROOT / "data" / "cache"
 # Fixed identity -> colour map (validated categorical slots, light surface).
 # Colour follows the engine everywhere, whatever subset a plot shows.
 COLORS = {
-    "siftdb-hnsw": "#2a78d6",
+    "vectra-hnsw": "#2a78d6",
     "faiss-hnsw": "#eb6834",
-    "siftdb-hnsw-pq": "#1baf7a",
+    "vectra-hnsw-pq": "#1baf7a",
     "faiss-ivfpq": "#eda100",
-    "siftdb-hnsw-es": "#e87ba4",
+    "vectra-hnsw-es": "#e87ba4",
     "faiss-ivfpq-refine": "#008300",
 }
 INK, INK2, MUTED, GRID, AXIS, SURFACE = (
@@ -211,7 +211,7 @@ def new_figure(width: float = 7.5, height: float = 4.6):
             "font.family": ["Segoe UI", "DejaVu Sans", "sans-serif"],
             "font.size": 10,
             "svg.fonttype": "none",
-            "svg.hashsalt": "siftdb",  # deterministic SVG ids -> clean diffs
+            "svg.hashsalt": "vectra",  # deterministic SVG ids -> clean diffs
         }
     )
     fig, ax = plt.subplots(figsize=(width, height), dpi=100)

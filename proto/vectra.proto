@@ -1,9 +1,9 @@
 syntax = "proto3";
 
-package siftdb;
+package vectra;
 
-// SiftDB: vector search with attribute filtering.
-service SiftDB {
+// Vectra: vector search with attribute filtering.
+service Vectra {
   rpc CreateCollection(CreateCollectionRequest) returns (CreateCollectionReply);
   rpc DropCollection(DropCollectionRequest) returns (DropCollectionReply);
   rpc Upsert(UpsertRequest) returns (UpsertReply);

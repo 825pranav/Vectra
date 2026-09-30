@@ -1,7 +1,7 @@
-# siftdb HNSW vs FAISS HNSW on SIFT1M at matched graph parameters.
+# vectra HNSW vs FAISS HNSW on SIFT1M at matched graph parameters.
 #   python -m bench.run configs/bench/sift1m_hnsw.yaml
 experiment: ann_curves
-title: "SIFT1M: siftdb HNSW vs FAISS HNSW (M=16, efConstruction=200)"
+title: "SIFT1M: vectra HNSW vs FAISS HNSW (M=16, efConstruction=200)"
 dataset: sift1m
 k: 10
 threads: 16            # batch QPS threads, also used for index builds
@@ -11,8 +11,8 @@ latency_queries: 2000  # single-thread per-query latency sample (first N test qu
 latency_cpu: 2          # pin single-thread latency to one P-core (hybrid CPU)
 recall_targets: [0.95]
 engines:
-  - name: siftdb-hnsw
-    kind: siftdb_hnsw
+  - name: vectra-hnsw
+    kind: vectra_hnsw
     M: 16
     ef_construction: 200
     seed: 42

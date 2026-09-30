@@ -154,7 +154,7 @@ def test_invalid_attribute_name_rejected_before_logging(tmp_path, small_data):
     c.close()
 
 
-@pytest.mark.skipif(os.environ.get("SIFTDB_SKIP_CRASH") == "1", reason="crash test disabled")
+@pytest.mark.skipif(os.environ.get("VECTRA_SKIP_CRASH") == "1", reason="crash test disabled")
 def test_kill9_recovery(tmp_path):
     """Short version of bench/crash.py: a few real kill -9 cycles."""
     for seed in range(4):

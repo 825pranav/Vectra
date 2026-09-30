@@ -179,7 +179,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
 
     runs, base_seed = int(cfg["runs"]), int(cfg.get("seed", 0))
     results = []
-    workdir = Path(tempfile.mkdtemp(prefix="siftdb-crash-"))
+    workdir = Path(tempfile.mkdtemp(prefix="vectra-crash-"))
     t0 = time.perf_counter()
     try:
         for r in range(runs):

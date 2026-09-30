@@ -37,7 +37,7 @@ def main() -> None:
     ds = load()
     x, qs = ds["base"], ds["learn"][:2000]
     h = HNSWIndex(128, M=16, ef_construction=200, capacity=len(x))
-    with np.load(CACHE / "sift1m_siftdb_hnsw_M16_efc200_seed42.npz") as z:
+    with np.load(CACHE / "sift1m_vectra_hnsw_M16_efc200_seed42.npz") as z:
         h.load_state({k: z[k] for k in z.files})
     const66 = {
         "feature": np.zeros(1, np.int32), "threshold": np.zeros(1), "left": np.zeros(1, np.int32),

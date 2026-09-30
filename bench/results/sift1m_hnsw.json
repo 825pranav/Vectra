@@ -2,7 +2,7 @@
   "experiment": "ann_curves",
   "config": {
     "experiment": "ann_curves",
-    "title": "SIFT1M: siftdb HNSW vs FAISS HNSW (M=16, efConstruction=200)",
+    "title": "SIFT1M: vectra HNSW vs FAISS HNSW (M=16, efConstruction=200)",
     "dataset": "sift1m",
     "k": 10,
     "threads": 16,
@@ -15,8 +15,8 @@
     ],
     "engines": [
       {
-        "name": "siftdb-hnsw",
-        "kind": "siftdb_hnsw",
+        "name": "vectra-hnsw",
+        "kind": "vectra_hnsw",
         "M": 16,
         "ef_construction": 200,
         "seed": 42,
@@ -68,8 +68,8 @@
   },
   "engines": [
     {
-      "name": "siftdb-hnsw",
-      "kind": "siftdb_hnsw",
+      "name": "vectra-hnsw",
+      "kind": "vectra_hnsw",
       "build_s": 45.7797763000126,
       "build_threads": 16,
       "index_bytes": 649258752,
@@ -419,7 +419,7 @@
   ],
   "qps_at_recall": {
     "0.95": {
-      "siftdb-hnsw": 44083.082539112555,
+      "vectra-hnsw": 44083.082539112555,
       "faiss-hnsw": 56627.3928974655
     }
   }

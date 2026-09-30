@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from proto import siftdb_pb2 as proto_dot_siftdb__pb2
+from proto import vectra_pb2 as proto_dot_vectra__pb2
 
 GRPC_GENERATED_VERSION = '1.84.0'
 GRPC_VERSION = grpc.__version__
@@ -18,15 +18,15 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in proto/siftdb_pb2_grpc.py depends on'
+        + ' but the generated code in proto/vectra_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
 
-class SiftDBStub:
-    """SiftDB: vector search with attribute filtering.
+class VectraStub:
+    """Vectra: vector search with attribute filtering.
     """
 
     def __init__(self, channel):
@@ -36,39 +36,39 @@ class SiftDBStub:
             channel: A grpc.Channel.
         """
         self.CreateCollection = channel.unary_unary(
-                '/siftdb.SiftDB/CreateCollection',
-                request_serializer=proto_dot_siftdb__pb2.CreateCollectionRequest.SerializeToString,
-                response_deserializer=proto_dot_siftdb__pb2.CreateCollectionReply.FromString,
+                '/vectra.Vectra/CreateCollection',
+                request_serializer=proto_dot_vectra__pb2.CreateCollectionRequest.SerializeToString,
+                response_deserializer=proto_dot_vectra__pb2.CreateCollectionReply.FromString,
                 _registered_method=True)
         self.DropCollection = channel.unary_unary(
-                '/siftdb.SiftDB/DropCollection',
-                request_serializer=proto_dot_siftdb__pb2.DropCollectionRequest.SerializeToString,
-                response_deserializer=proto_dot_siftdb__pb2.DropCollectionReply.FromString,
+                '/vectra.Vectra/DropCollection',
+                request_serializer=proto_dot_vectra__pb2.DropCollectionRequest.SerializeToString,
+                response_deserializer=proto_dot_vectra__pb2.DropCollectionReply.FromString,
                 _registered_method=True)
         self.Upsert = channel.unary_unary(
-                '/siftdb.SiftDB/Upsert',
-                request_serializer=proto_dot_siftdb__pb2.UpsertRequest.SerializeToString,
-                response_deserializer=proto_dot_siftdb__pb2.UpsertReply.FromString,
+                '/vectra.Vectra/Upsert',
+                request_serializer=proto_dot_vectra__pb2.UpsertRequest.SerializeToString,
+                response_deserializer=proto_dot_vectra__pb2.UpsertReply.FromString,
                 _registered_method=True)
         self.Search = channel.unary_unary(
-                '/siftdb.SiftDB/Search',
-                request_serializer=proto_dot_siftdb__pb2.SearchRequest.SerializeToString,
-                response_deserializer=proto_dot_siftdb__pb2.SearchReply.FromString,
+                '/vectra.Vectra/Search',
+                request_serializer=proto_dot_vectra__pb2.SearchRequest.SerializeToString,
+                response_deserializer=proto_dot_vectra__pb2.SearchReply.FromString,
                 _registered_method=True)
         self.Delete = channel.unary_unary(
-                '/siftdb.SiftDB/Delete',
-                request_serializer=proto_dot_siftdb__pb2.DeleteRequest.SerializeToString,
-                response_deserializer=proto_dot_siftdb__pb2.DeleteReply.FromString,
+                '/vectra.Vectra/Delete',
+                request_serializer=proto_dot_vectra__pb2.DeleteRequest.SerializeToString,
+                response_deserializer=proto_dot_vectra__pb2.DeleteReply.FromString,
                 _registered_method=True)
         self.Stats = channel.unary_unary(
-                '/siftdb.SiftDB/Stats',
-                request_serializer=proto_dot_siftdb__pb2.StatsRequest.SerializeToString,
-                response_deserializer=proto_dot_siftdb__pb2.StatsReply.FromString,
+                '/vectra.Vectra/Stats',
+                request_serializer=proto_dot_vectra__pb2.StatsRequest.SerializeToString,
+                response_deserializer=proto_dot_vectra__pb2.StatsReply.FromString,
                 _registered_method=True)
 
 
-class SiftDBServicer:
-    """SiftDB: vector search with attribute filtering.
+class VectraServicer:
+    """Vectra: vector search with attribute filtering.
     """
 
     def CreateCollection(self, request, context):
@@ -108,48 +108,48 @@ class SiftDBServicer:
         raise NotImplementedError('Method not implemented!')
 
 
-def add_SiftDBServicer_to_server(servicer, server):
+def add_VectraServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CreateCollection': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateCollection,
-                    request_deserializer=proto_dot_siftdb__pb2.CreateCollectionRequest.FromString,
-                    response_serializer=proto_dot_siftdb__pb2.CreateCollectionReply.SerializeToString,
+                    request_deserializer=proto_dot_vectra__pb2.CreateCollectionRequest.FromString,
+                    response_serializer=proto_dot_vectra__pb2.CreateCollectionReply.SerializeToString,
             ),
             'DropCollection': grpc.unary_unary_rpc_method_handler(
                     servicer.DropCollection,
-                    request_deserializer=proto_dot_siftdb__pb2.DropCollectionRequest.FromString,
-                    response_serializer=proto_dot_siftdb__pb2.DropCollectionReply.SerializeToString,
+                    request_deserializer=proto_dot_vectra__pb2.DropCollectionRequest.FromString,
+                    response_serializer=proto_dot_vectra__pb2.DropCollectionReply.SerializeToString,
             ),
             'Upsert': grpc.unary_unary_rpc_method_handler(
                     servicer.Upsert,
-                    request_deserializer=proto_dot_siftdb__pb2.UpsertRequest.FromString,
-                    response_serializer=proto_dot_siftdb__pb2.UpsertReply.SerializeToString,
+                    request_deserializer=proto_dot_vectra__pb2.UpsertRequest.FromString,
+                    response_serializer=proto_dot_vectra__pb2.UpsertReply.SerializeToString,
             ),
             'Search': grpc.unary_unary_rpc_method_handler(
                     servicer.Search,
-                    request_deserializer=proto_dot_siftdb__pb2.SearchRequest.FromString,
-                    response_serializer=proto_dot_siftdb__pb2.SearchReply.SerializeToString,
+                    request_deserializer=proto_dot_vectra__pb2.SearchRequest.FromString,
+                    response_serializer=proto_dot_vectra__pb2.SearchReply.SerializeToString,
             ),
             'Delete': grpc.unary_unary_rpc_method_handler(
                     servicer.Delete,
-                    request_deserializer=proto_dot_siftdb__pb2.DeleteRequest.FromString,
-                    response_serializer=proto_dot_siftdb__pb2.DeleteReply.SerializeToString,
+                    request_deserializer=proto_dot_vectra__pb2.DeleteRequest.FromString,
+                    response_serializer=proto_dot_vectra__pb2.DeleteReply.SerializeToString,
             ),
             'Stats': grpc.unary_unary_rpc_method_handler(
                     servicer.Stats,
-                    request_deserializer=proto_dot_siftdb__pb2.StatsRequest.FromString,
-                    response_serializer=proto_dot_siftdb__pb2.StatsReply.SerializeToString,
+                    request_deserializer=proto_dot_vectra__pb2.StatsRequest.FromString,
+                    response_serializer=proto_dot_vectra__pb2.StatsReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'siftdb.SiftDB', rpc_method_handlers)
+            'vectra.Vectra', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('siftdb.SiftDB', rpc_method_handlers)
+    server.add_registered_method_handlers('vectra.Vectra', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class SiftDB:
-    """SiftDB: vector search with attribute filtering.
+class Vectra:
+    """Vectra: vector search with attribute filtering.
     """
 
     @staticmethod
@@ -166,9 +166,9 @@ class SiftDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/siftdb.SiftDB/CreateCollection',
-            proto_dot_siftdb__pb2.CreateCollectionRequest.SerializeToString,
-            proto_dot_siftdb__pb2.CreateCollectionReply.FromString,
+            '/vectra.Vectra/CreateCollection',
+            proto_dot_vectra__pb2.CreateCollectionRequest.SerializeToString,
+            proto_dot_vectra__pb2.CreateCollectionReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -193,9 +193,9 @@ class SiftDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/siftdb.SiftDB/DropCollection',
-            proto_dot_siftdb__pb2.DropCollectionRequest.SerializeToString,
-            proto_dot_siftdb__pb2.DropCollectionReply.FromString,
+            '/vectra.Vectra/DropCollection',
+            proto_dot_vectra__pb2.DropCollectionRequest.SerializeToString,
+            proto_dot_vectra__pb2.DropCollectionReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -220,9 +220,9 @@ class SiftDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/siftdb.SiftDB/Upsert',
-            proto_dot_siftdb__pb2.UpsertRequest.SerializeToString,
-            proto_dot_siftdb__pb2.UpsertReply.FromString,
+            '/vectra.Vectra/Upsert',
+            proto_dot_vectra__pb2.UpsertRequest.SerializeToString,
+            proto_dot_vectra__pb2.UpsertReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -247,9 +247,9 @@ class SiftDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/siftdb.SiftDB/Search',
-            proto_dot_siftdb__pb2.SearchRequest.SerializeToString,
-            proto_dot_siftdb__pb2.SearchReply.FromString,
+            '/vectra.Vectra/Search',
+            proto_dot_vectra__pb2.SearchRequest.SerializeToString,
+            proto_dot_vectra__pb2.SearchReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -274,9 +274,9 @@ class SiftDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/siftdb.SiftDB/Delete',
-            proto_dot_siftdb__pb2.DeleteRequest.SerializeToString,
-            proto_dot_siftdb__pb2.DeleteReply.FromString,
+            '/vectra.Vectra/Delete',
+            proto_dot_vectra__pb2.DeleteRequest.SerializeToString,
+            proto_dot_vectra__pb2.DeleteReply.FromString,
             options,
             channel_credentials,
             insecure,
@@ -301,9 +301,9 @@ class SiftDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/siftdb.SiftDB/Stats',
-            proto_dot_siftdb__pb2.StatsRequest.SerializeToString,
-            proto_dot_siftdb__pb2.StatsReply.FromString,
+            '/vectra.Vectra/Stats',
+            proto_dot_vectra__pb2.StatsRequest.SerializeToString,
+            proto_dot_vectra__pb2.StatsReply.FromString,
             options,
             channel_credentials,
             insecure,

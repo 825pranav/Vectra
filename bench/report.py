@@ -49,7 +49,7 @@ def pq_table() -> str:
     for e in d["engines"]:
         q90, q95 = qps_at_recall(e["points"], 0.90), qps_at_recall(e["points"], 0.95)
         best = max(p["recall"] for p in e["points"])
-        if e["kind"] == "siftdb_hnsw_pq":
+        if e["kind"] == "vectra_hnsw_pq":
             held = f"16-byte codes ({e['code_bytes'] / 2**20:.1f} MiB)"
         elif e["name"] == "faiss-ivfpq":
             held = "16-byte codes"

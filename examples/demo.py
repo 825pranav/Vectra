@@ -4,7 +4,7 @@
     uv run python -m bench.datasets.msmarco     # once: passage embeddings (GPU if present)
     uv run python -m examples.demo
 
-Starts a siftdb server, loads 50,000 real passages (their MiniLM embeddings plus
+Starts a vectra server, loads 50,000 real passages (their MiniLM embeddings plus
 two attributes) through ``Upsert``, then runs natural-language queries, filtered
 queries, a delete, and finally a kill -9 crash-recovery cycle. Query text is
 embedded on the CPU; passage embeddings come from the dataset step.
@@ -58,7 +58,7 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=50_000, help="passages to load")
     args = ap.parse_args()
 
-    banner("siftdb demo: 50k MS MARCO passages, MiniLM embeddings, gRPC")
+    banner("vectra demo: 50k MS MARCO passages, MiniLM embeddings, gRPC")
     texts = passages(args.n)
     emb = np.load(DATA / "base.npy", mmap_mode="r")[: args.n]
     from sentence_transformers import SentenceTransformer
@@ -66,7 +66,7 @@ def main() -> None:
     model = SentenceTransformer(MODEL, device="cpu")
     qvecs = model.encode(QUERIES, normalize_embeddings=True)
 
-    root = Path(tempfile.mkdtemp(prefix="siftdb-demo-"))
+    root = Path(tempfile.mkdtemp(prefix="vectra-demo-"))
     server, servicer, port = serve(root, port=0)
     db = Client(f"127.0.0.1:{port}")
     print(f"server listening on 127.0.0.1:{port}, data in {root}")
@@ -93,7 +93,7 @@ def main() -> None:
         banner("4. Filtered search: same query, different filters (planner picks a strategy)")
         v = qvecs[0]
         stub = db.stub
-        from proto import siftdb_pb2 as pb
+        from proto import vectra_pb2 as pb
 
         for flt in ["words < 40", "words >= 40 AND has_digits == true", "words == 17"]:
             t0 = time.perf_counter()
@@ -145,7 +145,7 @@ def main() -> None:
     from bench.crash import crash_once
 
     for seed in (7, 8, 9):
-        r = crash_once(Path(tempfile.mkdtemp(prefix="siftdb-crash-")), seed)
+        r = crash_once(Path(tempfile.mkdtemp(prefix="vectra-crash-")), seed)
         verdict = "0 acknowledged writes lost" if r["ok"] else f"FAILED {r['problems']}"
         print(f"   run {seed}: killed after {r['acks']} acked calls ({r['acked_records']} records "
               f"upserted, some later deleted); reopened with {r['recovered_records']} live "

@@ -50,9 +50,9 @@ from engine.planner import Planner
 STRATEGIES = ["post_filter", "bitmap", "brute_force", "planner"]
 STRATEGY_COLORS = {
     "post_filter": COLORS["faiss-hnsw"],
-    "bitmap": COLORS["siftdb-hnsw-pq"],
+    "bitmap": COLORS["vectra-hnsw-pq"],
     "brute_force": COLORS["faiss-ivfpq"],
-    "planner": COLORS["siftdb-hnsw"],
+    "planner": COLORS["vectra-hnsw"],
 }
 
 

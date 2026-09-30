@@ -19,11 +19,11 @@ import grpc
 import numpy as np
 
 from engine.collection import Collection, InvalidArgument
-from proto import siftdb_pb2 as pb
-from proto import siftdb_pb2_grpc as pb_grpc
+from proto import vectra_pb2 as pb
+from proto import vectra_pb2_grpc as pb_grpc
 from storage.meta import AttrValue
 
-log = logging.getLogger("siftdb")
+log = logging.getLogger("vectra")
 
 
 def _attr_to_py(a: pb.Attribute) -> AttrValue:
@@ -45,7 +45,7 @@ def _attr_to_pb(v: AttrValue) -> pb.Attribute:
     return pb.Attribute(txt=str(v))
 
 
-class SiftDBServicer(pb_grpc.SiftDBServicer):
+class VectraServicer(pb_grpc.VectraServicer):
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -149,7 +149,7 @@ class SiftDBServicer(pb_grpc.SiftDBServicer):
 
 def serve(root: str | Path, host: str = "127.0.0.1", port: int = 50051, max_workers: int = 16):
     """Build and start a server; returns (server, servicer). Caller manages shutdown."""
-    servicer = SiftDBServicer(Path(root))
+    servicer = VectraServicer(Path(root))
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=max_workers),
         options=[
@@ -157,14 +157,14 @@ def serve(root: str | Path, host: str = "127.0.0.1", port: int = 50051, max_work
             ("grpc.max_receive_message_length", 64 * 1024 * 1024),
         ],
     )
-    pb_grpc.add_SiftDBServicer_to_server(servicer, server)
+    pb_grpc.add_VectraServicer_to_server(servicer, server)
     bound = server.add_insecure_port(f"{host}:{port}")
     server.start()
     return server, servicer, bound
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="siftdb gRPC server")
+    ap = argparse.ArgumentParser(description="vectra gRPC server")
     ap.add_argument("--root", default="data/collections", help="collections directory")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=50051)
@@ -172,7 +172,7 @@ def main() -> None:
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     server, servicer, bound = serve(args.root, args.host, args.port, args.workers)
-    log.info("siftdb listening on %s:%d", args.host, bound)
+    log.info("vectra listening on %s:%d", args.host, bound)
     try:
         server.wait_for_termination()
     except KeyboardInterrupt:

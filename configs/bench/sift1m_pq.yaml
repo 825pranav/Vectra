@@ -1,4 +1,4 @@
-# Compressed search on SIFT1M: siftdb HNSW+PQ (exact re-rank) vs FAISS IVF-PQ.
+# Compressed search on SIFT1M: vectra HNSW+PQ (exact re-rank) vs FAISS IVF-PQ.
 #   python -m bench.run configs/bench/sift1m_pq.yaml
 experiment: ann_curves
 title: "SIFT1M: compressed search (16-byte PQ codes)"
@@ -12,14 +12,14 @@ latency_cpu: 2          # pin single-thread latency to one P-core (hybrid CPU)
 recall_targets: [0.9, 0.95]
 plot_xmin: 0.5
 engines:
-  - name: siftdb-hnsw
-    kind: siftdb_hnsw
+  - name: vectra-hnsw
+    kind: vectra_hnsw
     M: 16
     ef_construction: 200
     seed: 42
     sweep: [16, 32, 48, 64, 96, 128, 192, 256]
-  - name: siftdb-hnsw-pq
-    kind: siftdb_hnsw_pq
+  - name: vectra-hnsw-pq
+    kind: vectra_hnsw_pq
     M: 16
     ef_construction: 200
     seed: 42
@@ -41,5 +41,5 @@ engines:
     m: 16
     train_size: 262144
     seed: 42
-    refine_k_factor: 4    # exact re-rank of 4k candidates, like siftdb's re-rank
+    refine_k_factor: 4    # exact re-rank of 4k candidates, like vectra's re-rank
     sweep: [1, 2, 4, 8, 16, 32, 64, 128]

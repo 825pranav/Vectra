@@ -15,8 +15,8 @@ from typing import Any
 import grpc
 import numpy as np
 
-from proto import siftdb_pb2 as pb
-from proto import siftdb_pb2_grpc as pb_grpc
+from proto import vectra_pb2 as pb
+from proto import vectra_pb2_grpc as pb_grpc
 
 
 def _attr(v: Any) -> pb.Attribute:
@@ -36,7 +36,7 @@ class Client:
         self.channel = grpc.insecure_channel(
             target, options=[("grpc.max_send_message_length", 64 * 1024 * 1024)]
         )
-        self.stub = pb_grpc.SiftDBStub(self.channel)
+        self.stub = pb_grpc.VectraStub(self.channel)
 
     def create_collection(self, name: str, dim: int, **options: Any) -> None:
         opts = {k.replace("__", "."): str(v) for k, v in options.items()}
