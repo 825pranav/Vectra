@@ -139,7 +139,6 @@ def crash_once(workdir: Path, seed: int, max_acks: int = 150) -> dict[str, Any]:
             deleted.update(int(v) for v in parts[2:])
     # A delete that was announced but never acknowledged may or may not have
     # reached the log before the kill: either outcome is correct for its ids.
-    # If the last delete was announced but not acked, its ids may go either way.
     in_flight: set[int] = set()
     n_acked_deletes = sum(1 for line in lines if line.split()[1] == "D")
     if len(intents) > n_acked_deletes:

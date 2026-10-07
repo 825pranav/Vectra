@@ -118,7 +118,8 @@ def _tokenize(text: str) -> list[tuple[str, Any]]:
         pos = m.end()
         kind = m.lastgroup
         val = m.group(kind)
-        # Classify each match: numbers become floats, quoted strings are unescaped, keywords lowercased.
+        # Classify each match: numbers become floats, quoted strings are unescaped, keywords
+        # lowercased.
         if kind == "num":
             toks.append(("lit", float(val)))
         elif kind == "str":
@@ -244,7 +245,8 @@ def _eval_cmp(col: Column, data: np.ndarray, node: Cmp) -> np.ndarray:
         if node.op == "==":
             return data == code
         return (data != code) & (data >= 0)
-    # Number and bool columns are float64 with NaN for missing; NaN compares False, so it never matches.
+    # Number and bool columns are float64 with NaN for missing; NaN compares False, so it never
+    # matches.
     v = float(node.value)
     with np.errstate(invalid="ignore"):
         if node.op == "==":

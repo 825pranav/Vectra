@@ -85,7 +85,8 @@ def create_app(root: Path = ROOT) -> FastAPI:
             raise HTTPException(404, f"collection {name!r} does not exist")
         return cols[name]
 
-    # POST /collections: validate the name, then create the collection under a lock (409 if it exists).
+    # POST /collections: validate the name, then create the collection under a lock (409 if it
+    # exists).
     @app.post("/collections", status_code=201)
     def create(body: CreateBody) -> dict[str, Any]:
         if not body.name.isidentifier():
@@ -100,7 +101,8 @@ def create_app(root: Path = ROOT) -> FastAPI:
                 raise HTTPException(400, str(e)) from e
         return {"name": body.name}
 
-    # POST upsert: JSON records -> ids, float32 matrix, tag dicts -> Collection.upsert(); 400 if bad.
+    # POST upsert: JSON records -> ids, float32 matrix, tag dicts -> Collection.upsert(); 400 if
+    # bad.
     @app.post("/collections/{name}/upsert")
     def upsert(name: str, body: UpsertBody) -> dict[str, Any]:
         col = get(name)
@@ -114,7 +116,8 @@ def create_app(root: Path = ROOT) -> FastAPI:
             raise HTTPException(400, str(e)) from e
         return {"upserted": n}
 
-    # POST search: run Collection.search() and turn the result into JSON hits plus strategy/selectivity.
+    # POST search: run Collection.search() and turn the result into JSON hits plus
+    # strategy/selectivity.
     @app.post("/collections/{name}/search")
     def search(name: str, body: SearchBody) -> dict[str, Any]:
         col = get(name)

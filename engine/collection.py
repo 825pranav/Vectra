@@ -125,7 +125,8 @@ class Collection:
 
     # ---- lifecycle --------------------------------------------------------
 
-    # Create a new collection on disk: merge overrides into defaults, validate, and freeze the config
+    # Create a new collection on disk: merge overrides into defaults, validate, and freeze the
+    # config
     # in collection.json so it never changes under existing data. The log starts at LSN 1.
     @classmethod
     def create(
@@ -163,7 +164,8 @@ class Collection:
         col._recover()
         return col
 
-    # Restart path: load the newest snapshot, then replay the log tail through the normal apply code.
+    # Restart path: load the newest snapshot, then replay the log tail through the normal apply
+    # code.
     def _recover(self) -> None:
         """Newest complete snapshot + replay of every WAL record after it.
 
@@ -192,7 +194,8 @@ class Collection:
         if self.meta.columns:
             self.meta.refresh_stats()
 
-    # Load snapshot arrays back into memory: id maps and tag columns, tombstones, graph, PQ, counters.
+    # Load snapshot arrays back into memory: id maps and tag columns, tombstones, graph, PQ,
+    # counters.
     def _restore(self, arrays: dict[str, np.ndarray], info: dict[str, Any]) -> None:
         n = int(info["n"])
         self._ensure_capacity(max(n, 1))
@@ -302,7 +305,8 @@ class Collection:
             for key in rec:
                 if not _ATTR_KEY.match(key):
                     raise InvalidArgument(f"invalid attribute name {key!r}")
-        # Under the writer lock: type-check tags against columns, then pick row numbers for each item.
+        # Under the writer lock: type-check tags against columns, then pick row numbers for each
+        # item.
         with self._lock:
             try:
                 self.meta.check_kinds(attrs)
@@ -333,7 +337,8 @@ class Collection:
         self.store.write(new_ids, vecs)
         self._encode(new_ids, vecs, end)
         self.meta.apply_upsert(new_ids, ids, attrs, replaced)
-        # Tombstone replaced rows, link new rows into the HNSW graph, and only then publish the new count.
+        # Tombstone replaced rows, link new rows into the HNSW graph, and only then publish the new
+        # count.
         self._tombstone(replaced)
         if self.hnsw is not None:
             self.hnsw.add(self.store.array, end)
@@ -466,7 +471,8 @@ class Collection:
         model = self.budget_model if ef is None and g is not None and pqv is None else None
         ef = int(ef or self.cfg["hnsw"]["ef_search"])
 
-        # No filter: exact scan for flat collections, else a graph walk (learned budget or fixed ef).
+        # No filter: exact scan for flat collections, else a graph walk (learned budget or fixed
+        # ef).
         if node is None:
             if g is None:
                 internal, dists = search_flat(vecs, n, q, k, deleted)

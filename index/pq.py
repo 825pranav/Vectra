@@ -234,7 +234,7 @@ class ProductQuantizer:
         parts = [self.codebooks[j][codes[:, j]] for j in range(self.m)]
         return np.concatenate(parts, axis=1)
 
-    # Per-query distance table used by the PQ graph walk.
+    # Per-query distance table (the graph walk builds the same table inside numba).
     def lut(self, q: np.ndarray) -> np.ndarray:
         return _njit_lut(np.ascontiguousarray(q, dtype=np.float32), self.codebooks)
 

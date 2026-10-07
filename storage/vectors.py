@@ -37,7 +37,8 @@ class VectorStore:
         for tmp in self.dir.glob("vectors.*.tmp"):  # growth interrupted by a crash
             with contextlib.suppress(OSError):
                 tmp.unlink()
-        # Existing data: map the newest file (row count from file size) and delete older generations.
+        # Existing data: map the newest file (row count from file size) and delete older
+        # generations.
         if gens:
             self._gen, path = gens[-1]
             rows = path.stat().st_size // (4 * self.dim)
@@ -93,7 +94,8 @@ class VectorStore:
             f.truncate(new_rows * self.dim * 4)
             f.flush()
             os.fsync(f.fileno())
-        # Atomic rename to the final name, map it, and swap it in; the old file is queued for deletion.
+        # Atomic rename to the final name, map it, and swap it in; the old file is queued for
+        # deletion.
         os.replace(tmp, new_path)
         new_mm = np.memmap(new_path, dtype=np.float32, mode="r+", shape=(new_rows, self.dim))
         self._stale.append(self._path(self._gen))

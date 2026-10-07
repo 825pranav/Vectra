@@ -70,7 +70,8 @@ def attributes(n: int, n_cat: int, seed: int) -> tuple[np.ndarray, np.ndarray, n
 
 # Load SIFT1M plus synthetic tags into a real Collection via upsert (cached after the first run).
 def build_collection(cfg: dict[str, Any], base: np.ndarray) -> Collection:
-    # Reuse the cached collection unless a rebuild was asked for; otherwise start from an empty folder.
+    # Reuse the cached collection unless a rebuild was asked for; otherwise start from an empty
+    # folder.
     path = CACHE / f"{cfg['dataset']}_filters_collection_seed{cfg['seed']}"
     if (path / Collection.CONFIG_FILE).exists() and not cfg.get("rebuild"):
         return Collection.open(path)
@@ -78,7 +79,8 @@ def build_collection(cfg: dict[str, Any], base: np.ndarray) -> Collection:
         import shutil
 
         shutil.rmtree(path)
-    # Generate the tags and create the collection with fsync and periodic snapshots off for bulk load.
+    # Generate the tags and create the collection with fsync and periodic snapshots off for bulk
+    # load.
     price, cat, stock = attributes(len(base), cfg["n_categories"], cfg["seed"])
     over = {
         "initial_capacity": len(base),
@@ -231,7 +233,8 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     pin = pinned_to_cpu(cfg.get("latency_cpu"))
     pin.__enter__()
     try:
-        # Tune mode: grid-search the two planner thresholds and recommend the fastest that meets min_recall.
+        # Tune mode: grid-search the two planner thresholds and recommend the fastest that meets
+        # min_recall.
         if cfg.get("mode") == "tune":
             # the planner itself, over a grid of thresholds, on LEARN queries only
             Q, preds, gts, sels = _workload(col, ds["learn"], cfg, 1)

@@ -32,7 +32,7 @@ def main() -> None:
     cfg = load_yaml(args.config)
     if args.rebuild:
         cfg["rebuild"] = True
-    # Every experiment module exposes run(cfg, name) and replot(cfg, name).
+    # Every experiment module exposes run(cfg, name); most also have replot(cfg, name).
     module = importlib.import_module(EXPERIMENTS[cfg["experiment"]])
     if args.plot_only:
         module.replot(cfg, args.config.stem)

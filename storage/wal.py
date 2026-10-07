@@ -170,7 +170,8 @@ class WriteAheadLog:
                 body = data[off + _HDR.size : off + _HDR.size + size]
                 if len(body) < size or zlib.crc32(body) != crc:
                     break
-                # Good frame: decode it, track the highest LSN seen, and yield it if the snapshot doesn't cover it.
+                # Good frame: decode it, track the highest LSN seen, and yield it if the snapshot
+                # doesn't cover it.
                 rec = decode(body)
                 self.last_lsn = max(self.last_lsn, rec.lsn)
                 if rec.lsn > after_lsn:
@@ -192,8 +193,8 @@ class WriteAheadLog:
         segs = self.segments()
         self._open_segment(segs[-1][0] if segs else next_lsn)
 
-    # Durable write: frame the payload with length + CRC, write, flush, then fsync before returning.
-    # Collection calls this before applying a change, so a confirmed save is always on disk.
+    # Durable write: frame the payload with length + CRC, write, flush, and fsync if enabled.
+    # Collection calls this before applying a change, so with fsync on a confirmed save is on disk.
     def append(self, payload: bytes) -> None:
         frame = _HDR.pack(len(payload), zlib.crc32(payload)) + payload
         self._f.write(frame)

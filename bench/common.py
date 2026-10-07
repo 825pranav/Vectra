@@ -188,7 +188,7 @@ def recall_at_k(found: np.ndarray, gt: np.ndarray, k: int) -> float:
     return float(hit.sum(1).mean() / k)
 
 
-# Same as recall_at_k but one value per query (used for buckets and training labels).
+# Same as recall_at_k but one value per query.
 def per_query_recall(found: np.ndarray, gt: np.ndarray, k: int) -> np.ndarray:
     f = found[:, :k]
     return (f[:, :, None] == gt[:, None, :k]).any(-1).sum(1) / k

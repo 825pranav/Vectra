@@ -67,7 +67,8 @@ class Client:
         # Send in chunks of `batch` records so each gRPC message stays small.
         for s in range(0, len(ids), batch):
             recs = []
-            # Build one protobuf Record per item: id, vector as a float list, and each tag as an Attribute.
+            # Build one protobuf Record per item: id, vector as a float list, and each tag as an
+            # Attribute.
             for j in range(s, min(s + batch, len(ids))):
                 r = pb.Record(id=str(ids[j]), vector=vectors[j].tolist())
                 for k, v in (attributes[j] if attributes else {}).items():

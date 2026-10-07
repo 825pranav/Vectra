@@ -180,8 +180,8 @@ def _njit_drain_maxheap(wd, wi, nw):
 
 
 # Greedy walk with one candidate: keep hopping to any closer neighbour until nothing improves.
-@njit(cache=True, fastmath=True, nogil=True)
 # Used on upper layers to find a good entry point. Returns (node, distance, distances computed).
+@njit(cache=True, fastmath=True, nogil=True)
 def _njit_greedy(q, vecs, g, rowbase, offset, cur, dcur):
     """Greedy walk on one layer (ef = 1). ``offset < 0`` means row = node id."""
     ndist = 0
@@ -311,7 +311,8 @@ def _njit_search_batch_phase(
         ep_i[0] = cur
         ep_d[0] = dcur
         out = np.empty(m, dtype=np.int32)
-        # On each layer the node lives on: search with efc, pick neighbours, write the node's own row.
+        # On each layer the node lives on: search with efc, pick neighbours, write the node's own
+        # row.
         for l in range(min(lx, max_level), -1, -1):
             tags[tid] += 1
             if l == 0:
@@ -394,7 +395,8 @@ def _njit_link_phase(seg, lay, tgt, src, vecs, nbr0, upper, upper_row):
                 g[row, cnt] = src[j]
                 cnt += 1
             continue
-        # Row would overflow: score old and new neighbours, then re-pick the best with the heuristic.
+        # Row would overflow: score old and new neighbours, then re-pick the best with the
+        # heuristic.
         vt = vecs[t]
         ci = np.empty(total, dtype=np.int32)
         cd = np.empty(total, dtype=np.float32)
@@ -469,7 +471,8 @@ def _njit_search_l0(q, vecs, nbr0, ep, dep, ef, deleted, mask, use_mask, visited
             break
         nc = _njit_minheap_pop(cd, ci, nc)
         hops += 1
-        # Every unvisited neighbour may become a candidate, but only alive, filter-passing ones are results.
+        # Every unvisited neighbour may become a candidate, but only alive, filter-passing ones are
+        # results.
         for j in range(width):
             e = nbr0[c, j]
             if e < 0:
@@ -492,8 +495,8 @@ def _njit_search_l0(q, vecs, nbr0, ep, dep, ef, deleted, mask, use_mask, visited
 
 
 # Full single-query HNSW search: descend upper layers, then search layer 0, then trim to k.
-@njit(cache=True, fastmath=True, nogil=True)
 # Returns (ids, squared distances, hops, distance count); called by HNSWIndex.search().
+@njit(cache=True, fastmath=True, nogil=True)
 def _njit_query(
     q, vecs, nbr0, upper, upper_row, entry, max_level, k, ef,
     deleted, mask, use_mask, visited, tag, max_hops,
@@ -646,13 +649,13 @@ def _njit_rerank(q, vecs, ids, k):
 
 
 # Full PQ query: build the lookup table, descend, walk layer 0 on ADC, then re-rank exactly.
-@njit(cache=True, fastmath=True, nogil=True)
 # Returns (ids, exact distances, hops, distance count, number of re-rank candidates).
+@njit(cache=True, fastmath=True, nogil=True)
 def _njit_query_pq(
     q, codebooks, codes, vecs, nbr0, upper, upper_row, entry, max_level, k, ef, rerank,
     deleted, mask, use_mask, visited, tag, max_hops,
 ):  # fmt: skip
-    # Build the per-query 16x256 distance table once; every later distance is just lookups.
+    # Build the per-query (m x 256) distance table once; every later distance is just lookups.
     lut = _njit_lut(q, codebooks)
     cur = entry
     dcur = _njit_adc(lut, codes, cur)
@@ -701,8 +704,8 @@ def _njit_query_pq_batch(
 
 
 # Pick each node's top layer from a hash of its id (not a random generator).
+# So rebuilding or replaying the log gives the same levels and therefore the same graph.
 def node_levels(ids: np.ndarray, seed: int, ml: float, max_level: int) -> np.ndarray:
-    # So rebuilding or replaying the log gives the same levels and therefore the same graph.
     """Level of each node: floor(-ln(U) * mL) with U from a splitmix64 hash of the id."""
     # splitmix64 hash steps turn the id into a well-mixed 64-bit number.
     mix = np.uint64((seed * 0x9E3779B97F4A7C15) % (1 << 64))
@@ -802,7 +805,7 @@ class HNSWIndex:
             levels=np.zeros(cap, dtype=np.int8),
         )
 
-    # Make room for more nodes or upper rows; called by add() and load_state().
+    # Make room for more nodes or upper rows; called by Collection, add() and load_state().
     def ensure_capacity(self, rows: int, upper_rows: int = 0) -> None:
         """Grow by doubling. Copies every array into a new graph object and swaps it
         in; the old object is never written again, so readers holding it are safe."""
@@ -826,7 +829,7 @@ class HNSWIndex:
         self.g = new
         self._build_visited = None
 
-    # Memory used by the live part of the graph, reported by benchmarks.
+    # Memory used by the live part of the graph, reported by benchmarks and Collection stats.
     def nbytes(self) -> int:
         g = self.g
         return int(
@@ -887,7 +890,8 @@ class HNSWIndex:
             pos = stop
             self.n = pos
 
-    # Insert one batch in two phases: new nodes write their own links, then targets get reverse links.
+    # Insert one batch in two phases: new nodes write their own links, then targets get reverse
+    # links.
     def _insert_batch(self, vecs: np.ndarray, batch: np.ndarray) -> None:
         g = self.g
         _njit_search_batch_phase(
@@ -927,8 +931,8 @@ class HNSWIndex:
         return v, np.uint32(tls.tag)
 
     # Single-query search used by Collection: returns (row ids, squared distances, stats).
+    # An optional bool mask limits which rows can be results (the planner's bitmap strategy).
     def search(
-        # An optional bool mask limits which rows can be results (the planner's bitmap strategy).
         self,
         vecs: np.ndarray,
         q: np.ndarray,

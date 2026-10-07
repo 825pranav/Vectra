@@ -73,7 +73,8 @@ class Column:
         else:
             self.data = np.full(capacity, np.nan, dtype=np.float64)
 
-    # Grow the array (doubling) by building a new one and swapping it in, so readers never see a resize.
+    # Grow the array (doubling) by building a new one and swapping it in, so readers never see a
+    # resize.
     def ensure(self, capacity: int) -> None:
         if capacity <= self.data.shape[0]:
             return
@@ -243,7 +244,8 @@ class MetaStore:
         # Clear tag values of replaced rows.
         self._clear_attrs(replaced)
         dead = set(replaced.tolist())
-        # Write each item's tags into its columns (creating a column on first use) and collect SQLite rows.
+        # Write each item's tags into its columns (creating a column on first use) and collect
+        # SQLite rows.
         rows = []
         for i, rec in zip(new_ids, attrs, strict=True):
             if int(i) in dead:  # superseded by a later duplicate in the same batch

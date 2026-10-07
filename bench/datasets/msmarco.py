@@ -44,7 +44,8 @@ def _stream_tsv(url: str, member: str, limit: int) -> list[str]:
                 if not info.name.endswith(member):
                     continue
                 # stream-mode members are not seekable, so no TextIOWrapper here
-                # Keep the text column of each line; stop and drop the connection once we have enough.
+                # Keep the text column of each line; stop and drop the connection once we have
+                # enough.
                 for raw in tar.extractfile(info):
                     texts.append(raw.decode("utf-8").rstrip("\r\n").split("\t", 1)[1])
                     if len(texts) >= limit:

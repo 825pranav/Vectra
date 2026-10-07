@@ -107,7 +107,8 @@ def main() -> None:
         stub = db.stub
         from proto import vectra_pb2 as pb
 
-        # Same query under three filters with different selectivity; convert the protobuf hits to dicts.
+        # Same query under three filters with different selectivity; convert the protobuf hits to
+        # dicts.
         for flt in ["words < 40", "words >= 40 AND has_digits == true", "words == 17"]:
             t0 = time.perf_counter()
             rep = stub.Search(pb.SearchRequest(collection="passages", vector=v.tolist(), k=3,

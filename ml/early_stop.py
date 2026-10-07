@@ -132,8 +132,8 @@ def ref_features(d_ep, topk, d_cand, promising, prev_kth, hops, ndist, recent, s
 
 
 # HNSW layer-0 search where a tree model chooses how much work to do for this query.
-@njit(cache=True, fastmath=_FASTMATH, nogil=True)
 # Returns top-k ids and distances, work counters, and (when recording) features and hit logs.
+@njit(cache=True, fastmath=_FASTMATH, nogil=True)
 def _njit_search_es(
     q, vecs, nbr0, upper, upper_row, entry, max_level, k, ef_max,
     deleted, mask, use_mask, visited, tag,
@@ -351,7 +351,8 @@ def collect(
         ids, _, hops, _, feats, log_i, log_h = run_es(
             index, vecs, q, k, ef_max, MODE_FIXED, interval=interval, record=True
         )
-        # Find the hop at which each true neighbour first entered the top-k; the latest is the label.
+        # Find the hop at which each true neighbour first entered the top-k; the latest is the
+        # label.
         found = truth & set(ids.tolist())
         first: dict[int, int] = {}
         for node, h in zip(log_i.tolist(), log_h.tolist(), strict=True):
@@ -363,7 +364,8 @@ def collect(
             ck_q.append(qi)
         # upfront row: probe features, label = smallest ef (after the probe)
         # that recovers everything the generous search found
-        # Try ef values from small to large and keep the first that finds everything the big search did.
+        # Try ef values from small to large and keep the first that finds everything the big search
+        # did.
         best, probe_feats = grid[-1], None
         for ef in grid:
             got, _, _, _, pf, _, _ = run_es(

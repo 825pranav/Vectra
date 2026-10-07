@@ -75,7 +75,8 @@ class VectraServicer(pb_grpc.VectraServicer):
 
     # Create RPC: validate the name, then create the collection on disk and register it.
     def CreateCollection(self, request, context):
-        # Reject empty names and names with slashes or a leading dot so they can't escape the root folder.
+        # Reject empty names and names with slashes or a leading dot so they can't escape the root
+        # folder.
         name = request.name
         if not name or "/" in name or "\\" in name or name.startswith("."):
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"invalid collection name {name!r}")
@@ -173,7 +174,7 @@ class VectraServicer(pb_grpc.VectraServicer):
 # Build the servicer (opens collections), a thread-pool gRPC server with 64 MB message caps,
 # and start it. Returns (server, servicer, bound_port).
 def serve(root: str | Path, host: str = "127.0.0.1", port: int = 50051, max_workers: int = 16):
-    """Build and start a server; returns (server, servicer). Caller manages shutdown."""
+    """Build and start a server; returns (server, servicer, bound_port). Caller manages shutdown."""
     servicer = VectraServicer(Path(root))
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=max_workers),

@@ -72,7 +72,8 @@ class Planner:
             if hit is not None and hit.shape[0] >= size:
                 self._cache.move_to_end(key)
                 return hit
-        # Cache miss: evaluate the filter against the tag columns (outside the lock, it can be slow).
+        # Cache miss: evaluate the filter against the tag columns (outside the lock, it can be
+        # slow).
         m = np.zeros(size, dtype=np.bool_)
         m[:n] = evaluate(node, meta.columns, n)
         # Store it and evict the least recently used masks beyond the cache size.
@@ -82,7 +83,8 @@ class Planner:
                 self._cache.popitem(last=False)
         return m
 
-    # Main entry from Collection.search(): filter AST + tag stats -> Plan(strategy, selectivity, mask).
+    # Main entry from Collection.search(): filter AST + tag stats -> Plan(strategy, selectivity,
+    # mask).
     def plan(
         self,
         node: Node,
@@ -93,7 +95,8 @@ class Planner:
         cap: int = 0,
     ) -> Plan:
         mask = None
-        # Small collections: count matches exactly with a mask. Big ones: estimate from tag statistics.
+        # Small collections: count matches exactly with a mask. Big ones: estimate from tag
+        # statistics.
         est = None if n < self.exact_below else estimate(node, meta.stats)
         if est is None:
             mask = self.mask(node, meta, n, version, cap)
