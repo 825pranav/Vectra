@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vectra</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5d6673; --line: #dfe3e8;
+    --accent: #7a3fd1; --accent-soft: #f1e9fc; --ok: #1f8a4c; --warn: #b26a00; --bad: #c0362c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --panel: #1a1f25; --ink: #e6e9ed; --muted: #9aa4b1; --line: #2c333c;
+      --accent: #b38cf5; --accent-soft: #2a2140; --ok: #4cc283; --warn: #e3a547; --bad: #ef6f64;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 18px 24px 48px; }
+  h1 { margin: 0; font-size: 22px; }
+  h1 small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 8px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 14px 0; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  input[type=text], textarea { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px;
+         border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  textarea { min-height: 60px; resize: vertical; }
+  input[type=number] { width: 70px; font: inherit; padding: 6px 8px; border-radius: 6px;
+         border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+  .row .grow { flex: 1 1 260px; }
+  .btn { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--accent);
+         background: var(--accent); color: #fff; cursor: pointer; white-space: nowrap; }
+  .btn.ghost { background: transparent; color: var(--accent); }
+  .btn.small { padding: 2px 9px; font-size: 13px; }
+  .btn:disabled { opacity: .5; cursor: wait; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chips button { font: inherit; font-size: 13px; border: 1px solid var(--line); border-radius: 999px;
+         background: var(--bg); color: var(--ink); padding: 3px 10px; cursor: pointer; }
+  .chips button:hover { border-color: var(--accent); }
+  .chips code { font-size: 12px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .meta b { color: var(--ink); }
+  .tag { display: inline-block; background: var(--accent-soft); color: var(--accent); border-radius: 4px;
+         padding: 0 6px; font-size: 12px; font-family: ui-monospace, monospace; }
+  .hit { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .hit:first-of-type { border-top: 0; }
+  .hit .rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hit .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  tr.planner td { font-weight: 600; }
+  .bar { display: inline-block; height: 8px; background: var(--accent); border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+  .note { color: var(--muted); font-size: 13px; }
+  .err { color: var(--bad); }
+  .ok { color: var(--ok); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  @media (max-width: 600px) { .wrap { padding-left: 16px; padding-right: 16px; } .hit { grid-template-columns: 26px 1fr; } .hit .act { grid-column: 2; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Vectra <small>vector database from scratch: HNSW, filtered search planner, WAL durability</small></h1>
+  <div class="stats" id="stats"></div>
+
+  <div class="card">
+    <p class="label">Search</p>
+    <input id="q" type="text" placeholder="Ask anything, e.g. best way to lower blood pressure" value="best way to lower blood pressure">
+    <div class="row">
+      <div class="grow"><input id="filter" type="text" placeholder='optional filter, e.g. words < 40 AND has_digits == true'></div>
+      <label>k <input id="k" type="number" min="1" max="50" value="5"></label>
+      <label>ef <input id="ef" type="number" min="0" value="0" title="0 = config default (64)"></label>
+      <button class="btn" id="searchBtn">Search</button>
+      <button class="btn ghost" id="compareBtn" title="needs a filter">Compare strategies</button>
+    </div>
+    <div class="chips" id="queries"></div>
+    <div class="chips" id="filters"></div>
+  </div>
+
+  <div id="compareOut"></div>
+  <div id="out"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <p class="label">Write path: add a passage</p>
+      <textarea id="newText" placeholder="Type a passage; it is WAL-logged, fsynced, indexed, then searchable immediately."></textarea>
+      <div class="row"><button class="btn" id="addBtn">Add passage</button><span id="addOut" class="note"></span></div>
+    </div>
+    <div class="card">
+      <p class="label">Durability: kill -9 a writer</p>
+      <p class="note" style="margin:0">Starts a writer process, hard-kills it at a random moment, reopens the collection
+        and checks every acknowledged write is there bit-for-bit (from <code>bench/crash.py</code>).</p>
+      <div class="row"><button class="btn" id="crashBtn">Run crash test</button><span id="crashOut" class="note"></span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = (x, d = 2) => Number(x).toFixed(d);
+const QUERIES = ["best way to lower blood pressure", "how long does it take to boil an egg",
+  "what is the capital of australia", "how much does a nurse make", "symptoms of vitamin d deficiency"];
+const FILTERS = [
+  ["no filter", ""],
+  ["common: words < 80", "words < 80"],
+  ["medium: words >= 90 AND has_digits == true", "words >= 90 AND has_digits == true"],
+  ["rare: words == 17", "words == 17"],
+];
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} :
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+async function loadStats() {
+  try {
+    const s = await api("/api/stats");
+    const stat = (v, l) => `<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
+    $("stats").innerHTML = stat(s.count.toLocaleString(), "live records") + stat(s.deleted, "deleted (tombstones)") +
+      stat(`${s.dim}-d ${s.metric}`, "vectors") + stat(s.index.toUpperCase(), "index") +
+      stat(`${(s.index_bytes / 2 ** 20).toFixed(1)} MiB`, "index in RAM") + stat(s.lsn.toLocaleString(), "WAL sequence (LSN)");
+  } catch (e) { $("stats").innerHTML = `<div class="stat err">${esc(e.message)}</div>`; }
+}
+
+const body = () => ({ query: $("q").value.trim(), k: Number($("k").value) || 5,
+                      filter: $("filter").value.trim(), ef: Number($("ef").value) || 0 });
+
+async function search() {
+  const b = body();
+  if (!b.query) return;
+  $("searchBtn").disabled = true;
+  try {
+    const r = await api("/api/search", b);
+    $("out").innerHTML = `<div class="card"><p class="label">Results</p>
+      <div class="meta"><span>strategy <span class="tag">${esc(r.strategy)}</span></span>
+        <span>selectivity <b>${r.selectivity < 1 ? fmt(r.selectivity, 4) : "1 (no filter)"}</b></span>
+        <span>search <b>${fmt(r.search_ms)} ms</b></span><span>query embedding <b>${fmt(r.embed_ms)} ms</b></span>
+        <span>ef <b>${r.ef}</b></span></div>
+      ${r.hits.length ? r.hits.map((h, i) => `<div class="hit"><div class="rank">#${i + 1}</div>
+        <div><div>${esc(h.text || "(no text)")}</div>
+          <div class="sub">id ${esc(h.id)} · distance ${fmt(h.distance, 3)} · words ${h.attributes.words} · has_digits ${h.attributes.has_digits}</div></div>
+        <div class="act"><button class="btn ghost small" data-del="${esc(h.id)}">delete</button></div></div>`).join("")
+        : `<p class="note">No hits match this filter.</p>`}</div>`;
+    $("out").querySelectorAll("[data-del]").forEach((btn) => btn.onclick = async () => {
+      await api("/api/delete", { id: btn.dataset.del });
+      await Promise.all([search(), loadStats()]);
+    });
+  } catch (e) {
+    $("out").innerHTML = `<div class="card err">${esc(e.message)}</div>`;
+  } finally { $("searchBtn").disabled = false; }
+}
+
+async function compare() {
+  const b = body();
+  if (!b.filter) { $("compareOut").innerHTML = `<div class="card note">Pick or type a filter first: strategies only differ for filtered queries.</div>`; return; }
+  $("compareBtn").disabled = true;
+  $("compareOut").innerHTML = `<div class="card note">Running each strategy 5 times…</div>`;
+  try {
+    const r = await api("/api/compare", b);
+    const max = Math.max(...r.rows.map((x) => x.ms));
+    $("compareOut").innerHTML = `<div class="card"><p class="label">Planner vs fixed strategies · filter <code>${esc(b.filter)}</code></p>
+      <div class="meta"><span>${r.matches} of top-${b.k} exact matches</span><span>selectivity <b>${fmt(r.selectivity, 4)}</b></span></div>
+      <table><tr><th>Strategy</th><th>Median latency</th><th>Recall@${b.k} vs exact</th><th>Hits</th></tr>
+      ${r.rows.map((x) => `<tr class="${x.strategy === "planner" ? "planner" : ""}">
+        <td>${x.strategy === "planner" ? `planner → <span class="tag">${esc(x.picked)}</span>` : esc(x.strategy)}</td>
+        <td><span class="bar" style="width:${Math.max(2, 120 * x.ms / max)}px"></span>${fmt(x.ms, 3)} ms</td>
+        <td class="${x.recall < 0.9 ? "err" : ""}">${fmt(x.recall)}</td><td>${x.hits}</td></tr>`).join("")}</table>
+      <p class="note">post_filter is fast but loses results when matches are rare; brute_force is exact but grows with the match count; bitmap sits in between. The planner picks one per query from the estimated selectivity.</p></div>`;
+  } catch (e) {
+    $("compareOut").innerHTML = `<div class="card err">${esc(e.message)}</div>`;
+  } finally { $("compareBtn").disabled = false; }
+}
+
+$("queries").innerHTML = QUERIES.map((q) => `<button>${esc(q)}</button>`).join("");
+$("queries").querySelectorAll("button").forEach((b) => b.onclick = () => { $("q").value = b.textContent; search(); });
+$("filters").innerHTML = FILTERS.map(([l, f]) => `<button data-f="${esc(f)}"><code>${esc(l)}</code></button>`).join("");
+$("filters").querySelectorAll("button").forEach((b) => b.onclick = () => { $("filter").value = b.dataset.f; search(); });
+$("searchBtn").onclick = search;
+$("compareBtn").onclick = compare;
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
+$("filter").addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
+
+$("addBtn").onclick = async () => {
+  const text = $("newText").value.trim();
+  if (!text) return;
+  $("addBtn").disabled = true;
+  try {
+    const r = await api("/api/add", { text });
+    $("addOut").innerHTML = `<span class="ok">added as <span class="tag">${esc(r.id)}</span></span> · now search for it`;
+    $("newText").value = "";
+    loadStats();
+  } catch (e) { $("addOut").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  finally { $("addBtn").disabled = false; }
+};
+
+let seed = 7;
+$("crashBtn").onclick = async () => {
+  $("crashBtn").disabled = true;
+  $("crashOut").textContent = "writing… killing… recovering…";
+  try {
+    const r = await api("/api/crash", { seed: seed++ });
+    $("crashOut").innerHTML = r.ok
+      ? `<span class="ok">killed after ${r.acks} acknowledged calls (${r.acked_records} records upserted, some later deleted); reopened with ${r.recovered_records} live records → 0 acknowledged writes lost</span> (${fmt(r.seconds, 1)} s)`
+      : `<span class="err">FAILED: ${esc(JSON.stringify(r.problems))}</span>`;
+  } catch (e) { $("crashOut").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  finally { $("crashBtn").disabled = false; }
+};
+
+loadStats();
+search();
+</script>
+</body>
+</html>
