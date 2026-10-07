@@ -21,6 +21,7 @@ For a read-heavy ANN workload that is the right side of the trade: reads scale
 linearly with the gRPC thread pool because Numba kernels release the GIL.
 """
 
+# Imports: the collection ties together config, filters/planner, index kernels and the three stores.
 from __future__ import annotations
 
 import json
@@ -44,17 +45,21 @@ from storage.meta import AttrValue, MetaStore
 from storage.vectors import VectorStore
 from storage.wal import Delete, Snapshots, WriteAheadLog, encode_delete, encode_upsert
 
+# Allowed tag names: identifier-like, so they are safe to use in filter text.
 _ATTR_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+# Engine errors the API layers translate into client-facing status codes.
 class CollectionError(Exception):
     """Base class for errors that map to a client-facing status."""
 
 
+# Bad input from the caller (shape, NaN, bad tag, bad filter); maps to INVALID_ARGUMENT / HTTP 400.
 class InvalidArgument(CollectionError):
     pass
 
 
+# What search() returns: user ids + distances, the method used, ef, selectivity and optional tags.
 @dataclass
 class SearchResult:
     ids: list[str]
@@ -67,9 +72,12 @@ class SearchResult:
     stats: dict[str, Any] = field(default_factory=dict)
 
 
+# The coordinator for one collection: owns the writer lock, the WAL, vector store, MetaStore,
+# tombstones, HNSW graph and PQ state. Every save, delete, search and recovery goes through here.
 class Collection:
     CONFIG_FILE = "collection.json"
 
+    # Build empty in-memory state from a config; create()/open() call this, then fill it.
     def __init__(self, path: Path, cfg: dict[str, Any]) -> None:
         self.path = Path(path)
         self.cfg = cfg
@@ -78,7 +86,9 @@ class Collection:
         self.metric: str = cfg["metric"]
         self.index_type: str = cfg["index"]
         cap = int(cfg["initial_capacity"])
+        # One writer lock for all saves/deletes; searches never take it.
         self._lock = threading.Lock()
+        # Open the stores: tags/id maps (MetaStore), vectors (memmap) and a tombstone byte per row.
         self.meta = MetaStore(self.path / "meta.sqlite", capacity=cap)
         self.store = VectorStore(self.path / "vectors", self.dim, capacity=cap)
         self.deleted = np.zeros(cap, dtype=np.uint8)
@@ -87,6 +97,7 @@ class Collection:
         self.version = 0  # bumped by every write; keys the planner's bitmap cache
         self.planner = Planner(cfg)
         self._churn = 0  # writes since attribute statistics were last refreshed
+        # Build the graph index only for hnsw / hnsw_pq collections (flat uses exact scans).
         self.hnsw: HNSWIndex | None = None
         if self.index_type in ("hnsw", "hnsw_pq"):
             self.hnsw = HNSWIndex.from_config(self.dim, cfg, capacity=cap)
@@ -96,6 +107,7 @@ class Collection:
         self._pq_view: tuple[np.ndarray, np.ndarray] | None = None
         if self.index_type == "hnsw_pq":
             self.pq = ProductQuantizer.from_config(self.dim, cfg)
+        # Durability: the write-ahead log, the snapshot folder and how often to snapshot.
         dur = cfg["durability"]
         self.wal = WriteAheadLog(self.path / "wal", fsync=bool(dur["fsync"]))
         self.snapshots = Snapshots(self.path / "snapshots")
@@ -113,6 +125,8 @@ class Collection:
 
     # ---- lifecycle --------------------------------------------------------
 
+    # Create a new collection on disk: merge overrides into defaults, validate, and freeze the config
+    # in collection.json so it never changes under existing data. The log starts at LSN 1.
     @classmethod
     def create(
         cls,
@@ -126,6 +140,7 @@ class Collection:
             raise FileExistsError(f"collection already exists at {path}")
         cfg = apply_dotted(default_config(), overrides or {})
         cfg.update(name=name, dim=int(dim))
+        # Check metric, index type and dimension before writing anything.
         if cfg["metric"] not in ("l2", "cosine"):
             raise InvalidArgument(f"unknown metric {cfg['metric']!r}")
         if cfg["index"] not in ("flat", "hnsw", "hnsw_pq"):
@@ -139,6 +154,7 @@ class Collection:
         col.wal.start(1)
         return col
 
+    # Open an existing collection folder: read its frozen config, then rebuild state via _recover().
     @classmethod
     def open(cls, path: str | Path) -> Collection:
         path = Path(path)
@@ -147,6 +163,7 @@ class Collection:
         col._recover()
         return col
 
+    # Restart path: load the newest snapshot, then replay the log tail through the normal apply code.
     def _recover(self) -> None:
         """Newest complete snapshot + replay of every WAL record after it.
 
@@ -157,6 +174,7 @@ class Collection:
         cur = self.snapshots.current()
         if cur is not None:
             self._restore(*Snapshots.load(cur[1]))
+        # Re-apply each logged record newer than the snapshot, tracking the LSN and row counts.
         for rec in self.wal.replay(self.lsn):
             if isinstance(rec, Delete):
                 self._apply_delete(rec.internal_ids)
@@ -169,10 +187,12 @@ class Collection:
             self.lsn = rec.lsn
             self.version += 1
             self._since_snapshot += count
+        # Reopen the log for appends and rebuild tag stats for the planner.
         self.wal.start(self.lsn + 1)
         if self.meta.columns:
             self.meta.refresh_stats()
 
+    # Load snapshot arrays back into memory: id maps and tag columns, tombstones, graph, PQ, counters.
     def _restore(self, arrays: dict[str, np.ndarray], info: dict[str, Any]) -> None:
         n = int(info["n"])
         self._ensure_capacity(max(n, 1))
@@ -188,6 +208,7 @@ class Collection:
         self.n_deleted = int(info["n_deleted"])
         if self.hnsw is not None:
             self.hnsw.load_state({k[6:]: v for k, v in arrays.items() if k.startswith("graph.")})
+        # PQ: restore the codebooks and copy the saved codes into a full-capacity codes array.
         if self.pq is not None and "pq.codebooks" in arrays:
             self.pq.codebooks = arrays["pq.codebooks"]
             codes = np.zeros((self.store.capacity, self.pq.m), dtype=np.uint8)
@@ -197,15 +218,18 @@ class Collection:
         self.lsn = int(info["lsn"])
         self.version = int(info["version"])
 
+    # Public snapshot: take the writer lock so no save runs halfway through it.
     def snapshot(self) -> int:
         """Persist in-memory state and truncate the WAL. Returns the snapshot LSN."""
         with self._lock:
             self._snapshot()
             return self.lsn
 
+    # Write a snapshot of everything up to self.lsn, then rotate the log so old segments can go.
     def _snapshot(self) -> None:
         n = self.n
         self.store.flush()  # vectors [0, n) must be durable before the WAL is cut
+        # Collect arrays: tombstones, id maps, tag columns, then graph and PQ data if present.
         ms = self.meta.snapshot_state()
         arrays: dict[str, np.ndarray] = {
             "deleted": self.deleted[:n].copy(),
@@ -218,6 +242,7 @@ class Collection:
         if self._pq_view is not None:
             arrays["pq.codebooks"] = self._pq_view[0]
             arrays["pq.codes"] = self._pq_view[1][:n]
+        # Small JSON info: LSN, counts, write version and the tag kinds/vocab/stats.
         info = {
             "lsn": self.lsn,
             "n": n,
@@ -225,10 +250,12 @@ class Collection:
             "version": self.version,
             "meta": ms["info"],
         }
+        # Write it atomically, then drop log segments the snapshot fully covers.
         self.snapshots.write(self.lsn, arrays, info)
         self.wal.rotate(self.lsn)
         self._since_snapshot = 0
 
+    # Clean shutdown: snapshot if anything changed since the last one, then close the stores.
     def close(self) -> None:
         with self._lock:
             if self._since_snapshot:
@@ -239,6 +266,8 @@ class Collection:
 
     # ---- writes -------------------------------------------------------------
 
+    # Validate and normalise incoming vectors: right shape, all finite, unit length for cosine.
+    # Used by both upsert() and search(); returns a contiguous float32[n, dim].
     def _prepare_vectors(self, vectors: np.ndarray) -> np.ndarray:
         v = np.asarray(vectors, dtype=np.float32)
         if v.ndim == 1:
@@ -251,6 +280,7 @@ class Collection:
             v = normalize(v)
         return np.ascontiguousarray(v)
 
+    # Save path entry point: validate, then (under the lock) plan ids, log + fsync, and apply.
     def upsert(
         self,
         ids: list[str],
@@ -258,6 +288,7 @@ class Collection:
         attributes: list[dict[str, AttrValue]] | None = None,
     ) -> int:
         """Insert or replace records. Returns the number of records written."""
+        # Validate everything before taking the lock, so bad input never reaches the log.
         vecs = self._prepare_vectors(vectors)
         ids = [str(u) for u in ids]
         if len(ids) != vecs.shape[0]:
@@ -271,6 +302,7 @@ class Collection:
             for key in rec:
                 if not _ATTR_KEY.match(key):
                     raise InvalidArgument(f"invalid attribute name {key!r}")
+        # Under the writer lock: type-check tags against columns, then pick row numbers for each item.
         with self._lock:
             try:
                 self.meta.check_kinds(attrs)
@@ -293,6 +325,7 @@ class Collection:
         attrs: list[dict[str, AttrValue]],
         replaced: np.ndarray,
     ) -> None:
+        # Grow every array (vectors, tombstones, PQ codes, graph) so the new rows fit.
         end = int(new_ids.max()) + 1
         self._ensure_capacity(end)
         # Vector first, then metadata, then graph edges: by the time any edge
@@ -300,14 +333,17 @@ class Collection:
         self.store.write(new_ids, vecs)
         self._encode(new_ids, vecs, end)
         self.meta.apply_upsert(new_ids, ids, attrs, replaced)
+        # Tombstone replaced rows, link new rows into the HNSW graph, and only then publish the new count.
         self._tombstone(replaced)
         if self.hnsw is not None:
             self.hnsw.add(self.store.array, end)
         self.n = max(self.n, end)
 
+    # Delete by user id: look up rows, log + fsync a DELETE record, then tombstone them.
     def delete(self, ids: list[str]) -> int:
         with self._lock:
             internal = self.meta.lookup([str(u) for u in ids])
+            # Only log and apply if at least one id was actually found.
             if internal.size:
                 lsn = self.lsn + 1
                 self.wal.append(encode_delete(lsn, internal))
@@ -316,6 +352,8 @@ class Collection:
                 self._after_write(int(internal.size))
             return int(internal.size)
 
+    # Bookkeeping after every write: bump the version (invalidates cached filter masks),
+    # refresh tag stats after enough churn, and snapshot every `snapshot_every` rows.
     def _after_write(self, count: int) -> None:
         self.version += 1
         self._churn += count
@@ -327,21 +365,25 @@ class Collection:
         if self.snapshot_every and self._since_snapshot >= self.snapshot_every:
             self._snapshot()
 
+    # Apply a logged delete: clear id map and tags, then mark the rows dead.
     def _apply_delete(self, internal: np.ndarray) -> None:
         self.meta.apply_delete(internal)
         self._tombstone(internal)
 
+    # Set the tombstone byte for each row; only rows not already dead count toward n_deleted.
     def _tombstone(self, internal: np.ndarray) -> None:
         if len(internal):
             fresh = internal[self.deleted[internal] == 0]
             self.deleted[internal] = 1
             self.n_deleted += int(fresh.size)
 
+    # Grow all per-row arrays to fit `rows`, by copy-and-swap so readers keep a valid old copy.
     def _ensure_capacity(self, rows: int) -> None:
         # Order matters for lock-free readers, which capture the graph first and
         # the vectors/tombstones second: everything a graph can reference must
         # already be at least as large as the graph.
         self.store.ensure_capacity(rows)
+        # Tombstones: double the array size until it fits.
         if rows > self.deleted.shape[0]:
             cap = self.deleted.shape[0]
             while cap < rows:
@@ -349,6 +391,7 @@ class Collection:
             grown = np.zeros(cap, dtype=np.uint8)
             grown[: self.deleted.shape[0]] = self.deleted
             self.deleted = grown
+        # PQ codes: grow to match the vector store's capacity.
         if self._pq_view is not None and rows > self._pq_view[1].shape[0]:
             codebooks, codes = self._pq_view
             grown = np.zeros((self.store.capacity, codes.shape[1]), dtype=np.uint8)
@@ -359,6 +402,7 @@ class Collection:
 
     # ---- product quantization -------------------------------------------------
 
+    # PQ step of a save: encode new vectors if PQ is trained, or train it once enough rows exist.
     def _encode(self, new_ids: np.ndarray, vecs: np.ndarray, end: int) -> None:
         if self.pq is None:
             return
@@ -367,17 +411,20 @@ class Collection:
         elif end >= int(self.cfg["pq"]["train_size"]):
             self._train_pq(end)
 
+    # Train PQ on a random sample of live vectors, encode every row, then publish both together.
     def _train_pq(self, end: int) -> None:
         """One-off: train codebooks on a seeded sample of live vectors, encode all.
 
         Runs inside the writer (blocking writes, not reads) the first time the
         collection reaches ``pq.train_size`` vectors."""
+        # Sample live rows with a fixed seed, so training is repeatable.
         alive = np.flatnonzero(self.deleted[:end] == 0)
         size = min(int(self.cfg["pq"]["train_size"]), alive.size)
         rng = np.random.default_rng(int(self.cfg["pq"]["seed"]))
         vecs = self.store.array
         pq = ProductQuantizer.from_config(self.dim, self.cfg)
         pq.train(vecs[np.sort(rng.choice(alive, size, replace=False))])
+        # Encode all rows written so far, then swap in the (codebooks, codes) pair as one tuple.
         codes = np.zeros((self.store.capacity, pq.m), dtype=np.uint8)
         codes[:end] = pq.encode(vecs[:end])
         self.pq = pq
@@ -385,6 +432,7 @@ class Collection:
 
     # ---- reads ------------------------------------------------------------
 
+    # Search path entry point: query vector + k + optional filter/ef -> SearchResult. Takes no lock.
     def search(
         self,
         vector: np.ndarray,
@@ -395,12 +443,14 @@ class Collection:
         strategy: str | None = None,
     ) -> SearchResult:
         """Top-k search. ``strategy`` forces a filter strategy (tests, benchmarks)."""
+        # Validate the query the same way as a save, and check k / ef.
         q = self._prepare_vectors(vector)[0]
         if k <= 0:
             raise InvalidArgument("k must be positive")
         if ef is not None and ef <= 0:
             raise InvalidArgument("ef must be positive")
         node = None
+        # Parse the filter text into an AST; a syntax error becomes InvalidArgument.
         if filter:
             try:
                 node = parse(filter)
@@ -416,6 +466,7 @@ class Collection:
         model = self.budget_model if ef is None and g is not None and pqv is None else None
         ef = int(ef or self.cfg["hnsw"]["ef_search"])
 
+        # No filter: exact scan for flat collections, else a graph walk (learned budget or fixed ef).
         if node is None:
             if g is None:
                 internal, dists = search_flat(vecs, n, q, k, deleted)
@@ -427,6 +478,7 @@ class Collection:
             internal, dists, st = self._graph(g, pqv, vecs, deleted, q, k, ef, None)
             base = "hnsw_pq" if pqv is not None else "hnsw"
             return self._result(internal, dists, base, ef, 1.0, include_attributes, st)
+        # Filtered search: let the planner choose a method.
         try:
             return self._filtered(
                 node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, include_attributes,
@@ -435,9 +487,11 @@ class Collection:
         except FilterError as e:
             raise InvalidArgument(f"bad filter: {e}") from e
 
+    # Run a filtered search: ask the planner for a plan, then dispatch to one of three methods.
     def _filtered(
         self, node, strategy, g, pqv, n, vecs, deleted, version, q, k, ef, attrs, model=None
     ):
+        # Flat collections have no graph, so they always use brute force.
         force = "brute_force" if g is None else strategy
         cap = 0 if g is None else g.capacity
         try:
@@ -446,11 +500,13 @@ class Collection:
             if isinstance(e, FilterError):
                 raise
             raise InvalidArgument(str(e)) from e
+        # brute_force: exact distances to only the matching, live rows.
         if plan.strategy == "brute_force":
             ids = np.flatnonzero(plan.mask[:n] & (deleted[:n] == 0))
             internal, dists = search_subset(vecs, ids, q, k)
             st = {"candidates": int(ids.size)}
             return self._result(internal, dists, "brute_force", 0, plan.selectivity, attrs, st)
+        # bitmap: walk the graph but only accept rows whose mask bit is set.
         if plan.strategy == "bitmap":
             if model is not None:  # selectivity is one of the model's features
                 internal, dists, st = model.search(self.hnsw, vecs, q, k, None, deleted,
@@ -458,6 +514,7 @@ class Collection:
                 return self._result(internal, dists, "bitmap+early_stop", st["hops"],
                                     plan.selectivity, attrs, st)  # fmt: skip
             return self._bitmap(plan, g, pqv, vecs, deleted, q, k, ef, n, attrs)
+        # post_filter: over-fetch from a normal graph walk, then drop hits that fail the filter.
         fetch, ef_post = self.planner.post_filter_fetch(k, ef, plan.selectivity)
         internal, dists, st = self._graph(g, pqv, vecs, deleted, q, fetch, ef_post, None)
         keep = evaluate(node, self.meta.columns, internal.astype(np.int64))
@@ -470,18 +527,21 @@ class Collection:
             return res
         return self._result(internal, dists, "post_filter", ef_post, plan.selectivity, attrs, st)
 
+    # Graph walk: PQ-guided walk plus exact re-rank if PQ is trained, else full-precision HNSW.
     def _graph(self, g, pqv, vecs, deleted, q, k, ef, mask):
         if pqv is not None:
             depth = self._rerank_depth(k, ef)
             return self.hnsw.search_pq(vecs, pqv[0], pqv[1], q, k, ef, depth, deleted, mask, g=g)
         return self.hnsw.search(vecs, q, k, ef, deleted, mask, g=g)
 
+    # Bitmap search: a graph walk with the planner's mask passed in as the accept filter.
     def _bitmap(self, plan: Plan, g, pqv, vecs, deleted, q, k, ef, n, attrs):
         # plan.mask spans the graph's whole capacity: the graph may already link
         # ids >= n (published after we read n), and those stay False.
         internal, dists, st = self._graph(g, pqv, vecs, deleted, q, k, ef, plan.mask)
         return self._result(internal, dists, "bitmap", ef, plan.selectivity, attrs, st)
 
+    # Attach (or remove) a learned early-stop model; only allowed for plain hnsw collections.
     def set_budget_model(self, model: EarlyStopModel | None) -> None:
         """Use ``model`` to pick the per-query budget when a search passes no ef."""
         if model is not None and self.index_type != "hnsw":
@@ -490,10 +550,12 @@ class Collection:
             model.meta.setdefault("multiplier", float(self.cfg["early_stop"]["multiplier"]))
         self.budget_model = model
 
+    # How many PQ candidates to re-score exactly: rerank_factor * ef, capped, but never below k.
     def _rerank_depth(self, k: int, ef: int) -> int:
         p = self.cfg["pq"]
         return max(k, min(int(p["rerank_max"]), int(p["rerank_factor"]) * ef))
 
+    # Final join: internal rows -> user ids (dropping rows deleted mid-search), plus tags if asked.
     def _result(
         self,
         internal: np.ndarray,
@@ -504,6 +566,7 @@ class Collection:
         include_attributes: bool,
         stats: dict[str, Any] | None = None,
     ) -> SearchResult:
+        # Rows whose user id was cleared (deleted while we searched) are dropped here.
         users = self.meta.internal_to_user
         keep = [j for j, i in enumerate(internal) if users[int(i)] is not None]
         internal, dists = internal[keep], dists[keep]
@@ -519,6 +582,7 @@ class Collection:
             stats=stats or {},
         )
 
+    # Summary numbers for the Stats RPC; count excludes tombstoned rows.
     def stats(self) -> dict[str, Any]:
         return {
             "name": self.name,
@@ -531,6 +595,7 @@ class Collection:
             "lsn": self.lsn,
         }
 
+    # Rough in-memory index size: graph plus either PQ codebooks + codes or full vectors.
     def index_bytes(self) -> int:
         """Bytes of the in-memory search structure. In hnsw_pq mode, once trained,
         full vectors stay on disk (memmap) and are read only to re-rank."""

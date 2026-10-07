@@ -11,6 +11,7 @@ here, as a baseline.
 
 from __future__ import annotations
 
+# Stdlib, Numba thread control, NumPy, shared bench helpers, dataset loader and our HNSW index.
 import json
 import time
 from typing import Any
@@ -38,6 +39,7 @@ from bench.datasets import load as load_dataset
 from index.hnsw import HNSWIndex
 
 
+# Build and query a tiny throwaway index so Numba compiles before any timing starts.
 def _warm_compile_hnsw(dim: int, M: int) -> None:
     """Trigger (or load cached) JIT compilation outside any timed region."""
     rng = np.random.default_rng(0)
@@ -53,9 +55,12 @@ def _warm_compile_hnsw(dim: int, M: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+# Base class for every engine in the benchmark: build once, then search by batch or one query.
 class Engine:
+    # Name of the search knob this engine sweeps (ef for HNSW, nprobe for IVF).
     param = "ef"
 
+    # Keep the spec, dataset name and base vectors that the subclasses build from.
     def __init__(self, spec: dict[str, Any], ds: dict[str, np.ndarray], dataset: str) -> None:
         self.spec = spec
         self.name = spec["name"]
@@ -64,26 +69,33 @@ class Engine:
         self.base = ds["base"]
         self.dim = self.base.shape[1]
 
+    # File name stem for this engine's cached index (subclasses include their parameters).
     def cache_stem(self) -> str:
         raise NotImplementedError
 
+    # Build or load the index; returns metadata like build time and memory size.
     def build(self, rebuild: bool) -> dict[str, Any]:
         raise NotImplementedError
 
+    # Search many queries at once (multi-threaded); returns an ids matrix.
     def batch(self, Q: np.ndarray, k: int, p: int) -> np.ndarray:
         raise NotImplementedError
 
+    # Search one query; used for single-thread latency.
     def single(self, q: np.ndarray, k: int, p: int) -> np.ndarray:
         raise NotImplementedError
 
+    # Context used during latency runs; a no-op unless an engine needs to limit threads.
     def single_thread(self):
         """Context for latency runs (FAISS must drop to one OpenMP thread)."""
         return _Null()
 
+    # Path of the JSON file holding cached build metadata.
     def _meta_path(self):
         return CACHE / f"{self.cache_stem()}.json"
 
 
+# Do-nothing context manager for engines that need no special single-thread setup.
 class _Null:
     def __enter__(self):
         return self
@@ -92,12 +104,15 @@ class _Null:
         return False
 
 
+# Our own HNSW engine (full precision), calling index/hnsw.py directly, not through the server.
 class SiftdbHNSW(Engine):
+    # Cache name includes M, ef_construction and seed so different builds never mix.
     def cache_stem(self) -> str:
         s = self.spec
         seed = s.get("seed", 42)
         return f"{self.dataset}_vectra_hnsw_M{s['M']}_efc{s['ef_construction']}_seed{seed}"
 
+    # Load the graph from the .npz cache if present, else build it and save the arrays.
     def build(self, rebuild: bool) -> dict[str, Any]:
         s = self.spec
         self.index = HNSWIndex(
@@ -113,6 +128,7 @@ class SiftdbHNSW(Engine):
                 self.index.load_state({k: z[k] for k in z.files})
             meta = json.loads(self._meta_path().read_text())
         else:
+            # Fresh build: compile first so the timer only measures graph construction.
             _warm_compile_hnsw(self.dim, s["M"])
             t = time.perf_counter()
             self.index.add(self.base, len(self.base))
@@ -120,22 +136,27 @@ class SiftdbHNSW(Engine):
             CACHE.mkdir(parents=True, exist_ok=True)
             np.savez(path, **self.index.state())
             self._meta_path().write_text(json.dumps(meta))
+        # Compile again (cheap if cached), then record memory: graph plus full vectors.
         _warm_compile_hnsw(self.dim, s["M"])
         meta["index_bytes"] = self.index.nbytes() + self.base.nbytes
         meta["graph_bytes"] = self.index.nbytes()
         return meta
 
+    # Batch search over the full-precision vectors; keep only the ids.
     def batch(self, Q, k, p):
         return self.index.search_batch(self.base, Q, k, p)[0]
 
+    # Single-query search; keep only the ids.
     def single(self, q, k, p):
         return self.index.search(self.base, q, k, p)[0]
 
 
+# Our HNSW + PQ engine: reuses the HNSW graph, adds trained PQ codebooks and codes.
 class SiftdbHNSWPQ(SiftdbHNSW):
     """Same graph as vectra-hnsw, traversed on PQ codes, exact re-rank of
     ``rerank_factor * ef`` candidates from the full-precision vectors."""
 
+    # Build or load the graph via the parent, then load or train PQ and encode every vector.
     def build(self, rebuild: bool) -> dict[str, Any]:
         from index.pq import ProductQuantizer
 
@@ -150,6 +171,7 @@ class SiftdbHNSWPQ(SiftdbHNSW):
                 self.pq.codebooks, self.codes = z["codebooks"], z["codes"]
             pq_meta = json.loads((CACHE / f"{stem}.json").read_text())
         else:
+            # Train PQ on a random sample of base vectors, then encode the whole base set.
             rng = np.random.default_rng(s.get("seed", 42))
             sample = self.base[rng.choice(len(self.base), s["train_size"], replace=False)]
             t = time.perf_counter()
@@ -160,6 +182,7 @@ class SiftdbHNSWPQ(SiftdbHNSW):
             pq_meta = {"pq_train_s": t_train, "pq_encode_s": time.perf_counter() - t}
             np.savez(path, codebooks=self.pq.codebooks, codes=self.codes)
             (CACHE / f"{stem}.json").write_text(json.dumps(pq_meta))
+        # Fold PQ time into build time and count memory as graph plus codes only.
         meta.update(pq_meta)
         meta["build_s"] = meta["build_s"] + pq_meta["pq_train_s"] + pq_meta["pq_encode_s"]
         meta["code_bytes"] = int(self.codes.nbytes + self.pq.nbytes())
@@ -169,18 +192,22 @@ class SiftdbHNSWPQ(SiftdbHNSW):
         self.factor = int(s.get("rerank_factor", 2))
         return meta
 
+    # Re-rank depth: rerank_factor times ef, with a floor of 10.
     def _r(self, p: int) -> int:
         return max(10, self.factor * int(p))
 
+    # Batch PQ search with exact re-rank of the best candidates.
     def batch(self, Q, k, p):
         cb = self.pq.codebooks
         return self.index.search_pq_batch(self.base, cb, self.codes, Q, k, p, self._r(p))[0]
 
+    # Single-query PQ search with exact re-rank.
     def single(self, q, k, p):
         cb = self.pq.codebooks
         return self.index.search_pq(self.base, cb, self.codes, q, k, p, self._r(p))[0]
 
 
+# Context manager that drops FAISS to 1 OpenMP thread for latency runs, then restores it.
 class _FaissSingle:
     def __init__(self, threads: int) -> None:
         self.threads = threads
@@ -197,11 +224,13 @@ class _FaissSingle:
         return False
 
 
+# FAISS HNSW baseline (IndexHNSWFlat) built with the same M and ef_construction as ours.
 class FaissHNSW(Engine):
     def cache_stem(self) -> str:
         s = self.spec
         return f"{self.dataset}_faiss_hnsw_M{s['M']}_efc{s['ef_construction']}"
 
+    # Load the FAISS index from cache, or build it, time it and save it.
     def build(self, rebuild: bool) -> dict[str, Any]:
         import faiss
 
@@ -225,31 +254,38 @@ class FaissHNSW(Engine):
         meta["index_bytes"] = int(faiss.serialize_index(self.index).nbytes)
         return meta
 
+    # Set FAISS's search width (efSearch) for this sweep point.
     def set(self, p):
         self.index.hnsw.efSearch = int(p)
 
+    # Batch search; FAISS returns (distances, ids), so keep ids.
     def batch(self, Q, k, p):
         self.set(p)
         return self.index.search(Q, k)[1]
 
+    # Single-query search through the same API with a 1-row matrix.
     def single(self, q, k, p):
         self.set(p)
         return self.index.search(q[None, :], k)[1][0]
 
+    # Latency runs with FAISS limited to one thread.
     def single_thread(self):
         import faiss
 
         return _FaissSingle(faiss.omp_get_max_threads())
 
 
+# FAISS IVF-PQ baseline (optionally with exact re-rank via RFlat); sweeps nprobe.
 class FaissIVFPQ(Engine):
     param = "nprobe"
 
+    # Cache name includes nlist, PQ size, re-rank factor and seed.
     def cache_stem(self) -> str:
         s = self.spec
         refine = f"_refine{s['refine_k_factor']}" if s.get("refine_k_factor") else ""
         return f"{self.dataset}_faiss_ivf{s['nlist']}_pq{s['m']}{refine}_seed{s.get('seed', 42)}"
 
+    # Load from cache, or train IVF+PQ on a sample, add all vectors and save.
     def build(self, rebuild: bool) -> dict[str, Any]:
         import faiss
 
@@ -275,6 +311,7 @@ class FaissIVFPQ(Engine):
             CACHE.mkdir(parents=True, exist_ok=True)
             faiss.write_index(self.index, str(path))
             self._meta_path().write_text(json.dumps(meta))
+        # Find the inner IVF index so nprobe can be set, unwrapping the re-rank layer if present.
         if s.get("refine_k_factor"):
             # IndexRefineFlat keeps full float vectors in RAM for the exact re-rank
             self._owner = self.index  # downcast wrappers do not own the C++ object
@@ -286,20 +323,24 @@ class FaissIVFPQ(Engine):
         meta["index_bytes"] = int(faiss.serialize_index(self.index).nbytes)
         return meta
 
+    # Batch search at this nprobe.
     def batch(self, Q, k, p):
         self.ivf.nprobe = int(p)
         return self.index.search(Q, k)[1]
 
+    # Single-query search at this nprobe.
     def single(self, q, k, p):
         self.ivf.nprobe = int(p)
         return self.index.search(q[None, :], k)[1][0]
 
+    # Latency runs with FAISS limited to one thread.
     def single_thread(self):
         import faiss
 
         return _FaissSingle(faiss.omp_get_max_threads())
 
 
+# Config "kind" name -> engine class.
 ENGINES: dict[str, type[Engine]] = {
     "vectra_hnsw": SiftdbHNSW,
     "vectra_hnsw_pq": SiftdbHNSWPQ,
@@ -308,6 +349,7 @@ ENGINES: dict[str, type[Engine]] = {
 }
 
 
+# Lets another module add an engine kind to the table.
 def register(kind: str, cls: type[Engine]) -> None:
     ENGINES[kind] = cls
 
@@ -317,9 +359,12 @@ def register(kind: str, cls: type[Engine]) -> None:
 # ---------------------------------------------------------------------------
 
 
+# Measure one sweep point: batch QPS and recall, then single-thread per-query latency.
 def measure_point(eng: Engine, Q, gt, k, p, warmup, runs, n_lat, cpu=None) -> dict[str, Any]:
+    # Batch timing over all queries gives QPS; the ids from it give recall.
     times, ids = timed(lambda: eng.batch(Q, k, p), warmup, runs)
     lat_q = Q[:n_lat]
+    # Latency: one query at a time, single-threaded and pinned, after a short warmup.
     with eng.single_thread(), pinned_to_cpu(cpu):
         for _ in range(warmup):
             for q in lat_q[:200]:
@@ -330,6 +375,7 @@ def measure_point(eng: Engine, Q, gt, k, p, warmup, runs, n_lat, cpu=None) -> di
                 t = time.perf_counter()
                 eng.single(q, k, p)
                 per_run[r, i] = time.perf_counter() - t
+    # Median over runs per query, then summarise.
     lat = np.median(per_run, axis=0) * 1e3  # ms, per query, median over runs
     return {
         eng.param: p,
@@ -342,6 +388,7 @@ def measure_point(eng: Engine, Q, gt, k, p, warmup, runs, n_lat, cpu=None) -> di
     }
 
 
+# Interpolate QPS at an exact recall target from the two measured points around it.
 def qps_at_recall(points: list[dict[str, Any]], target: float, key: str = "qps") -> float | None:
     """Interpolate throughput at a target recall (log-linear between neighbours)."""
     pts = sorted(points, key=lambda r: r["recall"])
@@ -354,7 +401,9 @@ def qps_at_recall(points: list[dict[str, Any]], target: float, key: str = "qps")
     return None
 
 
+# Experiment entry: build each engine, sweep its knob, record recall/QPS/latency, save and plot.
 def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
+    # Set thread counts for Numba and (if installed) FAISS.
     threads = int(cfg["threads"])
     numba.set_num_threads(threads)
     try:
@@ -363,6 +412,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
         faiss.omp_set_num_threads(threads)
     except ImportError:
         pass
+    # Load the dataset and optionally cut the number of test queries.
     ds = load_dataset(cfg["dataset"])
     k = int(cfg["k"])
     Q, gt = ds["query"], ds["gt"]
@@ -383,6 +433,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
         print(f"[{eng.name}] build {meta['build_s']:.1f}s, {meta['index_bytes'] / 2**20:.0f} MiB")
         eng.batch(Q[:32], k, spec["sweep"][0])  # smoke-test the search path too
         built.append((spec, eng, meta))
+    # Sweep every engine's knob and record one point per value.
     for spec, eng, meta in built:
         points = []
         for p in spec["sweep"]:
@@ -397,6 +448,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
                 flush=True,
             )
         out["engines"].append({"name": eng.name, "kind": spec["kind"], **meta, "points": points})
+    # Summarise QPS at each recall target, then save JSON and draw the plot.
     for target in cfg.get("recall_targets", []):
         out.setdefault("qps_at_recall", {})[str(target)] = {
             e["name"]: qps_at_recall(e["points"], target) for e in out["engines"]
@@ -406,12 +458,14 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     return out
 
 
+# Redraw the plot from the saved results JSON.
 def replot(cfg: dict[str, Any], name: str) -> None:
     out = json.loads((RESULTS / f"{name}.json").read_text())
     plot(out, name, cfg.get("title", name), int(cfg["k"]), cfg.get("recall_targets", []),
          cfg.get("plot_xmin", 0.8))  # fmt: skip
 
 
+# Name of Numba's threading layer for the results file, if one is active.
 def _threading_layer() -> str | None:
     try:
         return numba.threading_layer()
@@ -419,12 +473,14 @@ def _threading_layer() -> str | None:
         return None
 
 
+# Plot recall vs QPS for every engine with vertical lines at the recall targets.
 def plot(
     out: dict[str, Any], name: str, title: str, k: int, targets: list[float], xmin: float = 0.8
 ) -> None:
     fig, ax = new_figure()
     engines = out["engines"]
     anchors = []
+    # One line per engine, labelled at its first visible point.
     for e in engines:
         pts = sorted(e["points"], key=lambda r: r["recall"])
         x = [p["recall"] for p in pts]
@@ -435,6 +491,7 @@ def plot(
         visible = [(a, b) for a, b in zip(x, y, strict=True) if a >= xmin]
         if visible:
             anchors.append((visible[0], e["name"], color))
+    # Mark each recall target.
     for t in targets:
         ax.axvline(t, color=MUTED, linewidth=0.8)
         ax.text(t, 1.0, f" recall {t}", transform=ax.get_xaxis_transform(), va="top",

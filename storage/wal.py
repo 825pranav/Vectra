@@ -25,6 +25,7 @@ A crash at any point leaves either the old or the new snapshot current, never a
 half-written one.
 """
 
+# Imports: struct + zlib for binary framing and CRC32 checksums, os for fsync and atomic renames.
 from __future__ import annotations
 
 import contextlib
@@ -40,12 +41,15 @@ from typing import Any
 
 import numpy as np
 
+# Op codes stored in each record, plus the fixed binary headers:
+# _HDR = (payload length, CRC32), _OPLSN = (op byte, 64-bit log sequence number).
 OP_UPSERT = 1
 OP_DELETE = 2
 _HDR = struct.Struct("<II")
 _OPLSN = struct.Struct("<BQ")
 
 
+# A decoded save record: everything needed to redo one upsert call on recovery.
 @dataclass
 class Upsert:
     lsn: int
@@ -56,15 +60,19 @@ class Upsert:
     attrs: list[dict[str, Any]]
 
 
+# A decoded delete record: the internal rows to tombstone.
 @dataclass
 class Delete:
     lsn: int
     internal_ids: np.ndarray
 
 
+# Either kind of record; replay() yields these to Collection._recover().
 Record = Upsert | Delete
 
 
+# Serialise one upsert call into a payload: op + LSN, counts, id arrays, raw float32 vectors,
+# then the user ids and tags as JSON. append() adds the length + CRC frame.
 def encode_upsert(
     lsn: int,
     internal_ids: np.ndarray,
@@ -88,20 +96,24 @@ def encode_upsert(
     )
 
 
+# Serialise a delete: op + LSN, count, then the internal ids as int64.
 def encode_delete(lsn: int, internal_ids: np.ndarray) -> bytes:
     ids = np.asarray(internal_ids, dtype="<i8")
     return _OPLSN.pack(OP_DELETE, lsn) + struct.pack("<I", ids.size) + ids.tobytes()
 
 
+# Reverse of the encoders: payload bytes -> Upsert or Delete record (used by replay).
 def decode(payload: bytes) -> Record:
     op, lsn = _OPLSN.unpack_from(payload, 0)
     off = _OPLSN.size
+    # Delete is short: read the count, then that many int64 ids.
     if op == OP_DELETE:
         (n,) = struct.unpack_from("<I", payload, off)
         ids = np.frombuffer(payload, dtype="<i8", count=n, offset=off + 4).astype(np.int64)
         return Delete(lsn, ids)
     if op != OP_UPSERT:
         raise ValueError(f"unknown WAL op {op}")
+    # Upsert: walk an offset through the body in the same order encode_upsert wrote it.
     n, dim, nr = struct.unpack_from("<III", payload, off)
     off += 12
     ids = np.frombuffer(payload, dtype="<i8", count=n, offset=off).astype(np.int64)
@@ -115,7 +127,9 @@ def decode(payload: bytes) -> Record:
     return Upsert(lsn, ids, rep, vecs.astype(np.float32), meta["ids"], meta["attrs"])
 
 
+# Append-only log split into segment files named by their first LSN (wal/<lsn>.log).
 class WriteAheadLog:
+    # Remember the folder; the file isn't opened until start() runs after recovery.
     def __init__(self, directory: Path, fsync: bool = True) -> None:
         self.dir = Path(directory)
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -125,6 +139,7 @@ class WriteAheadLog:
 
     # ---- segments -----------------------------------------------------------
 
+    # List log segment files as (start LSN, path), oldest first.
     def segments(self) -> list[tuple[int, Path]]:
         segs = []
         for p in self.dir.glob("*.log"):
@@ -132,6 +147,7 @@ class WriteAheadLog:
                 segs.append((int(p.stem), p))
         return sorted(segs)
 
+    # Close the current segment and open (or create) one for appending, then fsync the folder entry.
     def _open_segment(self, start_lsn: int) -> None:
         if self._f is not None:
             self._f.close()
@@ -140,11 +156,13 @@ class WriteAheadLog:
 
     # ---- read ---------------------------------------------------------------
 
+    # Recovery: read segments in order, check each frame, yield records newer than the snapshot.
     def replay(self, after_lsn: int) -> Iterator[Record]:
         """Yield records with lsn > ``after_lsn``; truncate a torn tail in place."""
         for _, path in self.segments():
             data = path.read_bytes()
             off = 0
+            # Read frame by frame; stop at a short header, a short body or a CRC mismatch.
             while off < len(data):
                 if off + _HDR.size > len(data):
                     break
@@ -152,6 +170,7 @@ class WriteAheadLog:
                 body = data[off + _HDR.size : off + _HDR.size + size]
                 if len(body) < size or zlib.crc32(body) != crc:
                     break
+                # Good frame: decode it, track the highest LSN seen, and yield it if the snapshot doesn't cover it.
                 rec = decode(body)
                 self.last_lsn = max(self.last_lsn, rec.lsn)
                 if rec.lsn > after_lsn:
@@ -167,11 +186,14 @@ class WriteAheadLog:
 
     # ---- write --------------------------------------------------------------
 
+    # After recovery, open the newest segment (or a new one) for appends.
     def start(self, next_lsn: int) -> None:
         """Begin appending (after recovery). Reuses the newest segment if any."""
         segs = self.segments()
         self._open_segment(segs[-1][0] if segs else next_lsn)
 
+    # Durable write: frame the payload with length + CRC, write, flush, then fsync before returning.
+    # Collection calls this before applying a change, so a confirmed save is always on disk.
     def append(self, payload: bytes) -> None:
         frame = _HDR.pack(len(payload), zlib.crc32(payload)) + payload
         self._f.write(frame)
@@ -179,6 +201,7 @@ class WriteAheadLog:
         if self.fsync:
             os.fsync(self._f.fileno())
 
+    # After a snapshot at snapshot_lsn, start a new segment and delete old ones it fully covers.
     def rotate(self, snapshot_lsn: int) -> None:
         """Start a fresh segment and drop segments fully covered by a snapshot."""
         old = self.segments()
@@ -188,6 +211,7 @@ class WriteAheadLog:
                 with contextlib.suppress(OSError):
                     path.unlink()
 
+    # Close the open segment file.
     def close(self) -> None:
         if self._f is not None:
             self._f.close()
@@ -197,11 +221,14 @@ class WriteAheadLog:
 # ---- snapshots ------------------------------------------------------------------
 
 
+# Point-in-time copies of in-memory state, so recovery only replays the log after them.
 class Snapshots:
+    # Snapshots live in their own folder.
     def __init__(self, directory: Path) -> None:
         self.dir = Path(directory)
         self.dir.mkdir(parents=True, exist_ok=True)
 
+    # Find the snapshot that CURRENT names, as (lsn, path), or None if there isn't a usable one.
     def current(self) -> tuple[int, Path] | None:
         cur = self.dir / "CURRENT"
         if not cur.exists():
@@ -210,24 +237,30 @@ class Snapshots:
         path = self.dir / f"{lsn:020d}"
         return (lsn, path) if path.exists() else None
 
+    # Write a snapshot crash-safely: arrays + info into a temp folder, then rename, then publish.
     def write(self, lsn: int, arrays: dict[str, np.ndarray], info: dict[str, Any]) -> Path:
+        # Start from a clean temp folder named after the LSN.
         tmp = self.dir / f"tmp-{lsn:020d}"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir()
+        # Save each array as its own .npy file and fsync it.
         for name, arr in arrays.items():
             path = tmp / f"{name}.npy"
             with open(path, "wb") as f:
                 np.save(f, arr, allow_pickle=False)
                 f.flush()
                 os.fsync(f.fileno())
+        # Save the small JSON info dict alongside and fsync it.
         with open(tmp / "info.json", "w", encoding="utf-8") as f:
             json.dump(info, f)
             f.flush()
             os.fsync(f.fileno())
+        # Atomically rename the finished temp folder to its final name and persist the rename.
         final = self.dir / f"{lsn:020d}"
         shutil.rmtree(final, ignore_errors=True)
         os.replace(tmp, final)
         _fsync_dir(self.dir)
+        # Publish it: write CURRENT.tmp, fsync, then atomically replace CURRENT.
         cur_tmp = self.dir / "CURRENT.tmp"
         with open(cur_tmp, "w", encoding="utf-8") as f:
             f.write(str(lsn))
@@ -235,11 +268,13 @@ class Snapshots:
             os.fsync(f.fileno())
         os.replace(cur_tmp, self.dir / "CURRENT")
         _fsync_dir(self.dir)
+        # Delete every other snapshot folder (older snapshots and leftover temp folders).
         for p in self.dir.iterdir():
             if p.is_dir() and p != final:
                 shutil.rmtree(p, ignore_errors=True)
         return final
 
+    # Read a snapshot folder back: {array name: ndarray} plus the info dict.
     @staticmethod
     def load(path: Path) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
         arrays = {p.stem: np.load(p, allow_pickle=False) for p in path.glob("*.npy")}
@@ -247,6 +282,7 @@ class Snapshots:
         return arrays, info
 
 
+# fsync a directory so file creates/renames inside it survive a power cut.
 def _fsync_dir(path: Path) -> None:
     """Persist a directory entry (rename/create). Not supported on Windows."""
     if os.name == "nt":

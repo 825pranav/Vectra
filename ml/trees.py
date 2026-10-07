@@ -14,6 +14,7 @@ Only numerical ``<=`` splits are produced for our dense float features; the
 flattener rejects anything else rather than silently mis-evaluating it.
 """
 
+# Imports: json/Path to save and load the model file, NumPy arrays, Numba for the tree walk.
 from __future__ import annotations
 
 import json
@@ -24,10 +25,12 @@ import numpy as np
 from numba import njit
 
 
+# Score one feature vector with the whole tree ensemble; called from inside the search loop.
 @njit(cache=True, fastmath=False, nogil=True)
 def _njit_predict(x, feature, threshold, left, right, value, roots):
     """Raw ensemble score for one feature vector (sum of tree outputs)."""
     s = 0.0
+    # For each tree, follow <= splits down to a leaf (negative id) and add its value.
     for t in range(roots.shape[0]):
         node = roots[t]
         while node >= 0:
@@ -39,6 +42,7 @@ def _njit_predict(x, feature, threshold, left, right, value, roots):
     return s
 
 
+# Slow Python version of the tree walk, used by tests to check the Numba one.
 def ref_predict(x: np.ndarray, forest: dict[str, np.ndarray]) -> float:
     """Pure-Python twin of ``_njit_predict``."""
     s = 0.0
@@ -52,6 +56,7 @@ def ref_predict(x: np.ndarray, forest: dict[str, np.ndarray]) -> float:
     return s
 
 
+# Turn a LightGBM model dump (nested dicts) into the flat arrays the Numba kernel reads.
 def flatten(dump: dict[str, Any]) -> dict[str, np.ndarray]:
     """Flatten ``booster.dump_model()`` into the array form above."""
     feature: list[int] = []
@@ -61,10 +66,12 @@ def flatten(dump: dict[str, Any]) -> dict[str, np.ndarray]:
     value: list[float] = []
     roots: list[int] = []
 
+    # Recursive helper: append one node and return its id, or ~leaf_index for a leaf.
     def walk(node: dict[str, Any]) -> int:
         if "leaf_value" in node:
             value.append(float(node["leaf_value"]))
             return ~(len(value) - 1)
+        # Only "<=" splits are supported; anything else is rejected instead of mis-scored.
         if node.get("decision_type", "<=") != "<=":
             raise ValueError(f"unsupported split {node.get('decision_type')}")
         i = len(feature)
@@ -72,10 +79,12 @@ def flatten(dump: dict[str, Any]) -> dict[str, np.ndarray]:
         threshold.append(float(node["threshold"]))
         left.append(0)
         right.append(0)
+        # Children are filled in after the parent's slot is reserved.
         left[i] = walk(node["left_child"])
         right[i] = walk(node["right_child"])
         return i
 
+    # Flatten each tree and remember where its root is.
     for tree in dump["tree_info"]:
         roots.append(walk(tree["tree_structure"]))
     return {
@@ -88,12 +97,14 @@ def flatten(dump: dict[str, Any]) -> dict[str, np.ndarray]:
     }
 
 
+# Write the flat forest plus its metadata (mode, search settings, feature names) to a JSON file.
 def save_forest(path: Path, forest: dict[str, np.ndarray], meta: dict[str, Any]) -> None:
     payload = {k: v.tolist() for k, v in forest.items()}
     payload["meta"] = meta
     Path(path).write_text(json.dumps(payload))
 
 
+# Read a forest JSON back into typed NumPy arrays plus its metadata.
 def load_forest(path: Path) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
     raw = json.loads(Path(path).read_text())
     meta = raw.pop("meta")
@@ -102,6 +113,7 @@ def load_forest(path: Path) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
     return forest, meta
 
 
+# Python entry point for one prediction: makes x contiguous float64 and calls the kernel.
 def predict(x: np.ndarray, forest: dict[str, np.ndarray]) -> float:
     return float(
         _njit_predict(

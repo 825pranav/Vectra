@@ -10,6 +10,7 @@ query is only ~100-200 us.
 
 from __future__ import annotations
 
+# Timer, LightGBM to train forests, NumPy, plus the forest flattener and Numba predict kernel.
 import time
 
 import lightgbm as lgb
@@ -18,10 +19,13 @@ import numpy as np
 from ml.trees import _njit_predict, flatten
 
 
+# Micro-benchmark: trains forests of different sizes and times one Numba prediction for each.
 def main() -> None:
+    # Make a synthetic regression problem so the forests have something real to fit.
     rng = np.random.default_rng(0)
     x = rng.normal(size=(20000, 10))
     y = np.sin(x[:, 0]) + x[:, 1] ** 2 + 0.1 * rng.normal(size=20000)
+    # For each forest size: train, flatten to arrays, warm up the JIT, then time 20k predictions.
     for rounds, leaves in [(400, 31), (200, 31), (100, 15), (60, 15), (40, 7), (20, 7)]:
         params = {"objective": "regression", "num_leaves": leaves, "verbose": -1, "seed": 0}
         f = flatten(lgb.train(params, lgb.Dataset(x, y), rounds).dump_model())

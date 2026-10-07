@@ -10,6 +10,7 @@ brute-forcing a sample of queries must reproduce sift_groundtruth.ivecs.
 
 from __future__ import annotations
 
+# Stdlib for CLI, tar extraction, download and paths; NumPy; tqdm; exact scan for the sanity check.
 import argparse
 import tarfile
 import urllib.request
@@ -20,6 +21,7 @@ from tqdm import tqdm
 
 from index.flat import search_flat
 
+# Data folder and download mirrors (fast Hugging Face copy first, slow INRIA FTP as fallback).
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data" / "sift1m"
 URLS = [
@@ -28,18 +30,21 @@ URLS = [
 ]
 
 
+# Parse the .fvecs format: each row is an int32 dim followed by dim float32 values.
 def read_fvecs(path: Path) -> np.ndarray:
     raw = np.fromfile(path, dtype=np.int32)
     dim = raw[0]
     return raw.reshape(-1, dim + 1)[:, 1:].view(np.float32).copy()
 
 
+# Same as read_fvecs but for int32 rows (used for the ground-truth file).
 def read_ivecs(path: Path) -> np.ndarray:
     raw = np.fromfile(path, dtype=np.int32)
     dim = raw[0]
     return raw.reshape(-1, dim + 1)[:, 1:].copy()
 
 
+# Download a URL to a .part file with a progress bar, then rename so a half file never looks done.
 def _download(url: str, dest: Path) -> None:
     tmp = dest.with_suffix(".part")
     with urllib.request.urlopen(url, timeout=60) as r:
@@ -51,12 +56,14 @@ def _download(url: str, dest: Path) -> None:
     tmp.replace(dest)
 
 
+# Make sure the extracted SIFT files exist: try each mirror in turn, then untar. Returns the folder.
 def fetch(data_dir: Path = DATA) -> Path:
     data_dir.mkdir(parents=True, exist_ok=True)
     out = data_dir / "sift"
     if (out / "sift_base.fvecs").exists():
         return out
     tar = data_dir / "sift.tar.gz"
+    # Try mirrors in order; the for-else raises only if every one failed.
     if not tar.exists():
         for url in URLS:
             try:
@@ -71,6 +78,7 @@ def fetch(data_dir: Path = DATA) -> Path:
     return out
 
 
+# Dataset loader used by bench: base, query, learn vectors and the published ground truth.
 def load(data_dir: Path = DATA) -> dict[str, np.ndarray]:
     d = fetch(data_dir)
     return {
@@ -81,17 +89,20 @@ def load(data_dir: Path = DATA) -> dict[str, np.ndarray]:
     }
 
 
+# Integrity check: shapes are right and our exact search agrees with the published ground truth.
 def verify(ds: dict[str, np.ndarray], n_check: int = 20) -> None:
     base, query, gt = ds["base"], ds["query"], ds["gt"]
     assert base.shape == (1_000_000, 128), base.shape
     assert query.shape == (10_000, 128), query.shape
     assert gt.shape == (10_000, 100), gt.shape
+    # Brute-force a few queries and compare their top hits with the published answers.
     for i in range(n_check):
         ids, _ = search_flat(base, len(base), query[i], 10)
         # ties at the 10th position are possible; compare as sets on the first 9
         assert set(ids[:9].tolist()) <= set(gt[i, :10].tolist()), f"query {i} mismatch"
 
 
+# CLI: download, load, verify and print the array shapes.
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dir", type=Path, default=DATA)

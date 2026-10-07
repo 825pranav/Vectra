@@ -22,6 +22,7 @@ above always uses whatever default.yaml ships.
 
 from __future__ import annotations
 
+# Stdlib, NumPy, shared bench helpers, the real Collection, filter parser/evaluator and planner.
 import json
 import time
 from typing import Any
@@ -47,6 +48,7 @@ from engine.config import default_config
 from engine.filters import evaluate, parse
 from engine.planner import Planner
 
+# The four methods compared: three forced strategies plus the planner choosing per query.
 STRATEGIES = ["post_filter", "bitmap", "brute_force", "planner"]
 STRATEGY_COLORS = {
     "post_filter": COLORS["faiss-hnsw"],
@@ -56,6 +58,7 @@ STRATEGY_COLORS = {
 }
 
 
+# Seeded synthetic tags per row: uniform price, Zipf-skewed category, 70% in stock.
 def attributes(n: int, n_cat: int, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
     price = rng.integers(0, 1000, n).astype(np.float64)
@@ -65,7 +68,9 @@ def attributes(n: int, n_cat: int, seed: int) -> tuple[np.ndarray, np.ndarray, n
     return price, cat, stock
 
 
+# Load SIFT1M plus synthetic tags into a real Collection via upsert (cached after the first run).
 def build_collection(cfg: dict[str, Any], base: np.ndarray) -> Collection:
+    # Reuse the cached collection unless a rebuild was asked for; otherwise start from an empty folder.
     path = CACHE / f"{cfg['dataset']}_filters_collection_seed{cfg['seed']}"
     if (path / Collection.CONFIG_FILE).exists() and not cfg.get("rebuild"):
         return Collection.open(path)
@@ -73,6 +78,7 @@ def build_collection(cfg: dict[str, Any], base: np.ndarray) -> Collection:
         import shutil
 
         shutil.rmtree(path)
+    # Generate the tags and create the collection with fsync and periodic snapshots off for bulk load.
     price, cat, stock = attributes(len(base), cfg["n_categories"], cfg["seed"])
     over = {
         "initial_capacity": len(base),
@@ -83,6 +89,7 @@ def build_collection(cfg: dict[str, Any], base: np.ndarray) -> Collection:
     col = Collection.create(path, "filters", base.shape[1], over)
     t = time.perf_counter()
     step = 100_000
+    # Upsert in chunks of 100k rows through the normal write path.
     for s in range(0, len(base), step):
         e = min(s + step, len(base))
         attrs = [
@@ -96,6 +103,7 @@ def build_collection(cfg: dict[str, Any], base: np.ndarray) -> Collection:
     return Collection.open(path)
 
 
+# Build n random filter strings from templates so selectivity covers very rare to very broad.
 def predicates(rng: np.random.Generator, n: int, n_cat: int) -> list[str]:
     """Templates spanning selectivities from ~1e-5 to ~0.95."""
     out = []
@@ -122,17 +130,20 @@ def predicates(rng: np.random.Generator, n: int, n_cat: int) -> list[str]:
     return out
 
 
+# Exact filtered top-k per query, plus each filter's true selectivity: the recall answer key.
 def filtered_gt(col: Collection, Q: np.ndarray, preds: list[str], k: int):
     """Exact filtered top-k (float64 BLAS over all rows, non-matching masked out)."""
     base = np.asarray(col.store.array[: col.n], dtype=np.float64)
     norms = (base * base).sum(1)
     gts, sels = [], []
+    # Distances for 32 queries at a time, then mask out rows that fail each query's filter.
     for s in range(0, len(Q), 32):
         dist = norms[:, None] - 2.0 * (base @ Q[s : s + 32].astype(np.float64).T)
         for j, text in enumerate(preds[s : s + 32]):
             m = evaluate(parse(text), col.meta.columns, col.n)
             sels.append(float(m.mean()))
             d = np.where(m, dist[:, j], np.inf)
+            # Fewer than k rows may match; an empty filter gives an empty answer.
             kk = min(k, int(m.sum()))
             if kk == 0:
                 gts.append(np.empty(0, np.int64))
@@ -142,15 +153,18 @@ def filtered_gt(col: Collection, Q: np.ndarray, preds: list[str], k: int):
     return gts, np.asarray(sels)
 
 
+# Time Collection.search for one strategy over all queries; also record recall and chosen strategy.
 def measure(col, Q, preds, gts, k, ef, strategy, warmup, runs) -> dict[str, np.ndarray]:
     force = None if strategy == "planner" else strategy
     n = len(Q)
+    # Untimed warmup on up to 200 queries.
     for _ in range(warmup):
         for i in range(min(n, 200)):
             col.search(Q[i], k, preds[i], ef, strategy=force)
     lat = np.empty((runs, n))
     recall = np.zeros(n)
     chosen = []
+    # Timed passes; recall and the planner's choice are only recorded on the first pass.
     for r in range(runs):
         for i in range(n):
             t = time.perf_counter()
@@ -164,6 +178,7 @@ def measure(col, Q, preds, gts, k, ef, strategy, warmup, runs) -> dict[str, np.n
     return {"lat_ms": np.median(lat, axis=0) * 1e3, "recall": recall, "chosen": chosen}
 
 
+# Overall mean/p99 latency and recall per strategy, then the same split into selectivity buckets.
 def summarize(sels, results, buckets) -> dict[str, Any]:
     out: dict[str, Any] = {"overall": {}, "buckets": []}
     for s, r in results.items():
@@ -172,6 +187,7 @@ def summarize(sels, results, buckets) -> dict[str, Any]:
             "p99_ms": float(np.percentile(r["lat_ms"], 99)),
             "recall": float(r["recall"].mean()),
         }
+    # Group queries by selectivity range and average each strategy within the group.
     for lo, hi in zip(buckets, buckets[1:], strict=False):
         idx = np.flatnonzero((sels >= lo) & (sels < hi))
         if not idx.size:
@@ -186,6 +202,7 @@ def summarize(sels, results, buckets) -> dict[str, Any]:
     return out
 
 
+# Build a query workload: queries, random filters, exact answers and selectivities.
 def _workload(col, queries, cfg, seed_offset):
     rng = np.random.default_rng(cfg["seed"] + seed_offset)
     Q = queries[: cfg["n_queries"]]
@@ -194,14 +211,17 @@ def _workload(col, queries, cfg, seed_offset):
     return Q, preds, gts, sels
 
 
+# Swap the planner's thresholds on a live collection by building a new Planner.
 def _use_thresholds(col: Collection, planner_cfg: dict[str, Any]) -> None:
     col.cfg["planner"] = planner_cfg
     col.planner = Planner(col.cfg)
 
 
+# Experiment entry: either tune planner thresholds on learn queries, or test all strategies.
 def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     import numba
 
+    # Set threads, load data, build or open the collection, and pin to one CPU for timing.
     numba.set_num_threads(int(cfg["threads"]))
     ds = load_dataset(cfg["dataset"])
     col = build_collection(cfg, ds["base"])
@@ -211,6 +231,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     pin = pinned_to_cpu(cfg.get("latency_cpu"))
     pin.__enter__()
     try:
+        # Tune mode: grid-search the two planner thresholds and recommend the fastest that meets min_recall.
         if cfg.get("mode") == "tune":
             # the planner itself, over a grid of thresholds, on LEARN queries only
             Q, preds, gts, sels = _workload(col, ds["learn"], cfg, 1)
@@ -234,6 +255,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
             print("recommended:", out["recommended"])
             save_json(name, out)
             return out
+        # Test mode: use the shipped thresholds and run every strategy on held-out test queries.
         _use_thresholds(col, shipped)
         out["planner_config"] = shipped
         Q, preds, gts, sels = _workload(col, ds["query"], cfg, 2)
@@ -242,23 +264,27 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
             results[s] = measure(col, Q, preds, gts, k, ef, s, w, r)
             print(f"[test] {s:12s} mean={results[s]['lat_ms'].mean():7.3f}ms "
                   f"recall={results[s]['recall'].mean():.4f}", flush=True)  # fmt: skip
+        # Summarise, count how often the planner picked each method, then save and plot.
         summary = summarize(sels, results, cfg["buckets"])
         chosen = results["planner"]["chosen"]
         summary["planner_choices"] = {c: chosen.count(c) for c in sorted(set(chosen))}
         out["test"] = summary
         save_json(name, out)
         plot(out, name, cfg.get("title", name))
+    # Always unpin the CPU and close the collection.
     finally:
         pin.__exit__(None, None, None)
         col.close()
     return out
 
 
+# Plot latency vs selectivity bucket for each strategy, with rings where recall is below 0.9.
 def plot(out: dict[str, Any], name: str, title: str) -> None:
     fig, ax = new_figure()
     buckets = out["test"]["buckets"]
     x = [np.sqrt(max(b["lo"], 1e-6) * b["hi"]) for b in buckets]  # geometric bucket centre
     anchors = []
+    # One line per strategy, labelled at its last point.
     for s in STRATEGIES:
         y = [b[s]["mean_ms"] for b in buckets]
         anchors.append(((x[-1], y[-1]), s, STRATEGY_COLORS[s]))
@@ -282,5 +308,6 @@ def plot(out: dict[str, Any], name: str, title: str) -> None:
     save_figure(fig, name)
 
 
+# Redraw the plot from saved results.
 def replot(cfg: dict[str, Any], name: str) -> None:
     plot(json.loads((RESULTS / f"{name}.json").read_text()), name, cfg.get("title", name))

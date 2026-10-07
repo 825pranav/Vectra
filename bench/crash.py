@@ -21,6 +21,7 @@ crash / power loss, which a test on a live machine cannot simulate.
 
 from __future__ import annotations
 
+# Stdlib for spawning and killing the worker process, a reader thread, and timing; NumPy.
 import os
 import random
 import subprocess
@@ -32,19 +33,24 @@ from typing import Any
 
 import numpy as np
 
+# Repo root (for PYTHONPATH) and a small vector size to keep each run fast.
 ROOT = Path(__file__).resolve().parent.parent
 DIM = 8
 
 
+# Deterministic vector for record i, so the checker can recompute what should be stored.
 def vector_for(i: int) -> np.ndarray:
     return np.random.default_rng(1_000_003 + i).normal(size=DIM).astype(np.float32)
 
 
+# Deterministic tags for record i (number, text and bool) for the same reason.
 def attrs_for(i: int) -> dict[str, Any]:
     return {"seq": float(i), "tag": f"t{i % 7}", "odd": bool(i % 2)}
 
 
+# Child process: keep upserting (and sometimes deleting) and print ACK only after each call returns.
 def worker(path: str, seed: int, snapshot_every: int) -> None:
+    # Fresh collection with frequent snapshots, so kills also land during snapshot writes.
     from engine.collection import Collection
 
     over = {"durability.snapshot_every": snapshot_every, "initial_capacity": 64}
@@ -52,6 +58,7 @@ def worker(path: str, seed: int, snapshot_every: int) -> None:
     rng = np.random.default_rng(seed)
     seq = 0
     print("READY", flush=True)
+    # Loop forever until the parent kills us; each batch has a random size.
     while True:
         b = int(rng.integers(1, 40))
         ids = [f"w{seq + j}" for j in range(b)]
@@ -59,6 +66,7 @@ def worker(path: str, seed: int, snapshot_every: int) -> None:
         col.upsert(ids, vecs, [attrs_for(seq + j) for j in range(b)])
         print(f"ACK U {seq} {seq + b}", flush=True)
         seq += b
+        # Sometimes delete a few earlier records too.
         if seq > 20 and rng.random() < 0.2:
             victims = sorted({int(v) for v in rng.integers(0, seq, size=3)})
             # announce first: if we die after the delete is logged but before the
@@ -68,10 +76,12 @@ def worker(path: str, seed: int, snapshot_every: int) -> None:
             print("ACK D " + " ".join(map(str, victims)), flush=True)
 
 
+# Parent side of one test: start a worker, kill -9 it at a random ack, reopen, check every ack.
 def crash_once(workdir: Path, seed: int, max_acks: int = 150) -> dict[str, Any]:
     """One kill-and-recover cycle. Returns a verdict dict (``ok`` + details)."""
     from engine.collection import Collection
 
+    # Pick a random snapshot interval and launch the worker as a separate Python process.
     rnd = random.Random(seed)
     path = workdir / f"run{seed}"
     snapshot_every = rnd.choice([50, 200, 1000])
@@ -83,12 +93,14 @@ def crash_once(workdir: Path, seed: int, max_acks: int = 150) -> dict[str, Any]:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    # Shared state filled by the reader thread: ack lines, delete intents, and two events.
     lines: list[str] = []
     intents: list[str] = []
     got_ready = threading.Event()
     enough = threading.Event()
     kill_after = rnd.randint(0, max_acks)
 
+    # Reader thread: collect READY, INTENT and ACK lines from the worker's stdout.
     def read() -> None:
         # Only complete lines count as acks: a line torn by the kill is dropped.
         for raw in proc.stdout:
@@ -104,6 +116,7 @@ def crash_once(workdir: Path, seed: int, max_acks: int = 150) -> dict[str, Any]:
                 if len(lines) >= kill_after:
                     enough.set()
 
+    # Wait for READY, then for enough acks, then sleep a tiny random time and hard-kill the worker.
     reader = threading.Thread(target=read, daemon=True)
     reader.start()
     if not got_ready.wait(120):
@@ -115,6 +128,7 @@ def crash_once(workdir: Path, seed: int, max_acks: int = 150) -> dict[str, Any]:
     proc.wait()
     reader.join(5)
 
+    # Turn ack lines into the set of acked upsert ids and acked delete ids.
     acked: set[int] = set()
     deleted: set[int] = set()
     for line in lines:
@@ -125,16 +139,19 @@ def crash_once(workdir: Path, seed: int, max_acks: int = 150) -> dict[str, Any]:
             deleted.update(int(v) for v in parts[2:])
     # A delete that was announced but never acknowledged may or may not have
     # reached the log before the kill: either outcome is correct for its ids.
+    # If the last delete was announced but not acked, its ids may go either way.
     in_flight: set[int] = set()
     n_acked_deletes = sum(1 for line in lines if line.split()[1] == "D")
     if len(intents) > n_acked_deletes:
         in_flight = {int(v) for v in intents[-1].split()[2:]}
 
+    # Reopen the collection in-process; this runs WAL replay and snapshot recovery.
     col = Collection.open(path)
     try:
         problems = []
         live = col.meta.user_to_internal
         vecs = col.store.array
+        # Every acked, not-deleted record must be present with identical vector and tags.
         for i in sorted(acked - deleted - in_flight):
             j = live.get(f"w{i}")
             if j is None:
@@ -143,20 +160,25 @@ def crash_once(workdir: Path, seed: int, max_acks: int = 150) -> dict[str, Any]:
                 problems.append(f"w{i} vector differs")
             elif col.meta.attributes(j) != attrs_for(i):
                 problems.append(f"w{i} attributes differ")
+        # Every acked delete must really be gone.
         for i in sorted(deleted):
             if f"w{i}" in live:
                 problems.append(f"deleted w{i} present")
+        # Any record present at all must have its exact vector, so no half-applied write survived.
         for uid, j in live.items():  # includes unacked-but-durable records
             if not np.array_equal(vecs[j], vector_for(int(uid[1:]))):
                 problems.append(f"{uid} (unacked) has a corrupt vector")
+        # Graph size must match the record count.
         if col.hnsw is not None and col.hnsw.n != col.n:
             problems.append(f"graph has {col.hnsw.n} nodes, collection {col.n}")
+        # A sample of acked vectors must be found by searching for themselves.
         found = 0
         sample = sorted(acked - deleted - in_flight)[:50]
         for i in sample:
             found += col.search(vector_for(i), k=1, ef=64).ids == [f"w{i}"]
         if sample and found < 0.95 * len(sample):
             problems.append(f"only {found}/{len(sample)} acked vectors findable")
+        # Verdict for this run.
         return {
             "ok": not problems,
             "seed": seed,
@@ -171,6 +193,7 @@ def crash_once(workdir: Path, seed: int, max_acks: int = 150) -> dict[str, Any]:
         col.close()
 
 
+# Experiment entry called by bench.run: repeat crash_once N times and save a pass count.
 def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     import shutil
     import tempfile
@@ -181,6 +204,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
     results = []
     workdir = Path(tempfile.mkdtemp(prefix="vectra-crash-"))
     t0 = time.perf_counter()
+    # Run every seed in a temp folder, print progress, and always clean up the folder.
     try:
         for r in range(runs):
             res = crash_once(workdir, base_seed + r, int(cfg.get("max_acks", 150)))
@@ -189,6 +213,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
             print(f"[crash {r + 1}/{runs}] acks={res.get('acks', 0)} {status}", flush=True)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+    # Summarise the runs and write bench/results/<name>.json.
     passed = sum(r["ok"] for r in results)
     out = {
         "experiment": "crash",
@@ -206,6 +231,7 @@ def run(cfg: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
+    # Dispatch: "worker" runs the child writer; anything else points to bench.run.
     if len(sys.argv) >= 2 and sys.argv[1] == "worker":
         worker(sys.argv[2], int(sys.argv[3]), int(sys.argv[4]))
     else:

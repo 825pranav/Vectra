@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+// Wire schema shared by api/client.py and api/server.py; Python stubs are generated from this file.
 package vectra;
 
 // Vectra: vector search with attribute filtering.
@@ -12,6 +13,7 @@ service Vectra {
   rpc Stats(StatsRequest) returns (StatsReply);
 }
 
+// Create: collection name, vector dimension, and optional config overrides.
 message CreateCollectionRequest {
   string name = 1;
   uint32 dim = 2;
@@ -22,9 +24,11 @@ message CreateCollectionRequest {
 
 message CreateCollectionReply {}
 
+// Drop: remove a whole collection by name.
 message DropCollectionRequest { string name = 1; }
 message DropCollectionReply {}
 
+// A tag value. Exactly one of number, text or boolean is set; the server maps it to a Python value.
 message Attribute {
   oneof value {
     double num = 1;
@@ -33,19 +37,23 @@ message Attribute {
   }
 }
 
+// One item to save: user id, float vector (packed for compact encoding) and its tags.
 message Record {
   string id = 1;
   repeated float vector = 2 [packed = true];
   map<string, Attribute> attributes = 3;
 }
 
+// Upsert: a batch of records for one collection (the client sends 1,000 per call).
 message UpsertRequest {
   string collection = 1;
   repeated Record records = 2;
 }
 
+// Upsert reply: how many records were saved.
 message UpsertReply { uint64 upserted = 1; }
 
+// Search: query vector, how many results (k, 0 = default 10), optional filter and ef.
 message SearchRequest {
   string collection = 1;
   repeated float vector = 2 [packed = true];
@@ -57,12 +65,14 @@ message SearchRequest {
   bool include_attributes = 6;
 }
 
+// One result: user id, squared L2 distance, and tags if include_attributes was set.
 message Hit {
   string id = 1;
   float distance = 2;
   map<string, Attribute> attributes = 3;
 }
 
+// Search reply: the hits plus which method the planner picked, the ef used and the selectivity.
 message SearchReply {
   repeated Hit hits = 1;
   // How the planner executed this query (for debugging and benchmarks).
@@ -71,13 +81,16 @@ message SearchReply {
   float selectivity = 4;
 }
 
+// Delete: user ids to tombstone in one collection.
 message DeleteRequest {
   string collection = 1;
   repeated string ids = 2;
 }
 
+// Delete reply: how many of the ids were found and deleted.
 message DeleteReply { uint64 deleted = 1; }
 
+// Stats: summary numbers for one collection (count, deleted, index size, last log sequence number).
 message StatsRequest { string collection = 1; }
 
 message StatsReply {

@@ -7,6 +7,7 @@ timings. Numba JIT compilation happens during warmup and is never timed.
 
 from __future__ import annotations
 
+# Stdlib for system info, timing, JSON results and paths; NumPy for recall maths.
 import ctypes
 import json
 import platform
@@ -19,6 +20,7 @@ from typing import Any
 
 import numpy as np
 
+# Shared folders: results JSON/SVG output and the cache of prebuilt indexes.
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS = ROOT / "bench" / "results"
 CACHE = ROOT / "data" / "cache"
@@ -33,6 +35,7 @@ COLORS = {
     "vectra-hnsw-es": "#e87ba4",
     "faiss-ivfpq-refine": "#008300",
 }
+# Palette for text, grid lines, axes and background used by every plot.
 INK, INK2, MUTED, GRID, AXIS, SURFACE = (
     "#0b0b0b",
     "#52514e",
@@ -43,6 +46,7 @@ INK, INK2, MUTED, GRID, AXIS, SURFACE = (
 )
 
 
+# CPU model string for the results file, read per OS (registry, /proc/cpuinfo, or platform).
 def cpu_name() -> str:
     if sys.platform == "win32":
         import winreg
@@ -60,6 +64,7 @@ def cpu_name() -> str:
     return platform.processor()
 
 
+# Total RAM in GB for the results file; Windows needs a ctypes call, others use sysconf.
 def ram_gb() -> float:
     if sys.platform == "win32":
 
@@ -85,6 +90,7 @@ def ram_gb() -> float:
     return round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30, 1)
 
 
+# Hardware and library versions saved with every result, so numbers can be compared fairly.
 def system_info(threads: int) -> dict[str, Any]:
     import numba
 
@@ -98,6 +104,7 @@ def system_info(threads: int) -> dict[str, Any]:
         "numba_threading_layer": None,
         "threads": threads,
     }
+    # FAISS is optional; record its version only if it is installed.
     try:
         import faiss
 
@@ -107,6 +114,7 @@ def system_info(threads: int) -> dict[str, Any]:
     return info
 
 
+# Context manager that pins the current thread to one CPU while timing single-thread latency.
 class pinned_to_cpu:
     """Pin the calling thread to one logical CPU for single-threaded timing.
 
@@ -116,10 +124,12 @@ class pinned_to_cpu:
     ``cpu=None`` leaves scheduling alone.
     """
 
+    # Remember which CPU to pin to; the old affinity is saved on enter so exit can restore it.
     def __init__(self, cpu: int | None) -> None:
         self.cpu = cpu
         self._old = None
 
+    # On enter: save the current affinity and pin to self.cpu (Windows API or Linux sched call).
     def __enter__(self):
         if self.cpu is None:
             return self
@@ -137,6 +147,7 @@ class pinned_to_cpu:
         time.sleep(0.05)
         return self
 
+    # On exit: put the old affinity back so later code is not stuck on one core.
     def __exit__(self, *exc):
         if self.cpu is None or self._old is None:
             return False
@@ -150,6 +161,7 @@ class pinned_to_cpu:
         return False
 
 
+# Benchmark timing protocol: untimed warmup runs (JIT compile), then timed runs.
 def timed(fn: Callable[[], Any], warmup: int, runs: int) -> tuple[list[float], Any]:
     """Run ``fn`` warmup + runs times; return the timed durations and the last result."""
     out = None
@@ -163,10 +175,12 @@ def timed(fn: Callable[[], Any], warmup: int, runs: int) -> tuple[list[float], A
     return times, out
 
 
+# Median of the timed runs, the number we report.
 def median(xs: list[float]) -> float:
     return float(statistics.median(xs))
 
 
+# Recall@k: average share of each query's true top-k that the engine found.
 def recall_at_k(found: np.ndarray, gt: np.ndarray, k: int) -> float:
     """Mean |found[:k] ∩ gt[:k]| / k over queries."""
     f = found[:, :k]
@@ -174,11 +188,13 @@ def recall_at_k(found: np.ndarray, gt: np.ndarray, k: int) -> float:
     return float(hit.sum(1).mean() / k)
 
 
+# Same as recall_at_k but one value per query (used for buckets and training labels).
 def per_query_recall(found: np.ndarray, gt: np.ndarray, k: int) -> np.ndarray:
     f = found[:, :k]
     return (f[:, :, None] == gt[:, None, :k]).any(-1).sum(1) / k
 
 
+# Write a results dict to bench/results/<name>.json; returns the path.
 def save_json(name: str, payload: dict[str, Any]) -> Path:
     RESULTS.mkdir(parents=True, exist_ok=True)
     path = RESULTS / f"{name}.json"
@@ -186,6 +202,7 @@ def save_json(name: str, payload: dict[str, Any]) -> Path:
     return path
 
 
+# Apply the shared plot style: light background, grid, no top/right borders, muted ticks.
 def style_axes(ax) -> None:
     ax.set_facecolor(SURFACE)
     ax.grid(True, color=GRID, linewidth=0.8, linestyle="-")
@@ -200,6 +217,7 @@ def style_axes(ax) -> None:
     ax.title.set_color(INK)
 
 
+# Make a styled matplotlib figure using the file-only Agg backend (no window needed).
 def new_figure(width: float = 7.5, height: float = 4.6):
     import matplotlib
 
@@ -220,12 +238,14 @@ def new_figure(width: float = 7.5, height: float = 4.6):
     return fig, ax
 
 
+# Put each line's label right next to it, spreading labels so they never overlap.
 def direct_labels(ax, anchors: list[tuple[tuple[float, float], str, str]], min_gap: float = 13.0):
     """Label each line at its anchor point, nudged apart vertically (in pixels)
     so labels never overlap each other; a thin leader ties a nudged label back.
 
     ``anchors``: [((x, y), text, color)] in data coordinates.
     """
+    # Convert anchors to pixel space and sort them bottom to top.
     if not anchors:
         return
     fig = ax.figure
@@ -236,6 +256,7 @@ def direct_labels(ax, anchors: list[tuple[tuple[float, float], str, str]], min_g
     for i in range(1, len(ys)):  # push up until every pair is min_gap apart
         ys[i] = max(ys[i], ys[i - 1] + min_gap)
     shift = (sum(p[0][1] for p in pts) - sum(ys)) / len(ys)  # re-centre the stack
+    # Draw each label at its spread-out position, with a thin leader line if it moved far.
     for (px, xy, text, color), y in zip(pts, ys, strict=True):
         dy = y + shift - px[1]
         ax.annotate(
@@ -245,6 +266,7 @@ def direct_labels(ax, anchors: list[tuple[tuple[float, float], str, str]], min_g
         )  # fmt: skip
 
 
+# Save a figure as SVG next to the results JSON, then close it to free memory.
 def save_figure(fig, name: str) -> Path:
     RESULTS.mkdir(parents=True, exist_ok=True)
     path = RESULTS / f"{name}.svg"

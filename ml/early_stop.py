@@ -34,6 +34,7 @@ The trained trees are flattened (ml/trees.py) and evaluated inside the Numba
 search loop, so a prediction costs about a microsecond, not a Python call.
 """
 
+# Imports: HNSW heap and descent kernels are reused so this search matches the normal one.
 from __future__ import annotations
 
 import json
@@ -58,6 +59,7 @@ from index.hnsw import (
 )
 from ml.trees import _njit_predict, flatten, load_forest, save_forest
 
+# Names of the 12 features the model sees at each checkpoint, in array order.
 FEATURES = [
     "log_d_entry",
     "best_over_entry",
@@ -73,6 +75,7 @@ FEATURES = [
     "log2_n",
 ]
 N_FEAT = len(FEATURES)
+# Search modes: fixed ef (normal or label recording), predict ef once, or re-predict a stop point.
 MODE_FIXED, MODE_UPFRONT, MODE_CHECKPOINT = 0, 1, 2
 # These kernels use inf as "no k-th result yet". Full fastmath lets LLVM assume
 # no infinities (``x < inf`` folds to true), so keep every flag except ninf/nnan:
@@ -81,10 +84,12 @@ _FASTMATH = {"reassoc", "contract", "arcp", "nsz", "afn"}
 _CAP = 1e3  # ratios are clamped: before k results exist the k-th distance is inf
 
 
+# Fill `out` with the 12 cheap features describing how the search is going right now.
 @njit(cache=True, fastmath=_FASTMATH, nogil=True)
 def _njit_features(out, d_ep, topk, d_cand, promising, prev_kth, hops, ndist, recent, sel, log2n):
     eps = 1e-12
     k = topk.shape[0]
+    # Best and k-th distances so far; "full" means k results have been found.
     d_best = topk[0]
     d_kth = topk[k - 1]
     full = d_kth < np.inf
@@ -102,6 +107,7 @@ def _njit_features(out, d_ep, topk, d_cand, promising, prev_kth, hops, ndist, re
     out[11] = log2n
 
 
+# NumPy twin of the feature kernel, for tests.
 def ref_features(d_ep, topk, d_cand, promising, prev_kth, hops, ndist, recent, sel, log2n):
     """NumPy twin of ``_njit_features``."""
     eps = 1e-12
@@ -125,7 +131,9 @@ def ref_features(d_ep, topk, d_cand, promising, prev_kth, hops, ndist, recent, s
     )
 
 
+# HNSW layer-0 search where a tree model chooses how much work to do for this query.
 @njit(cache=True, fastmath=_FASTMATH, nogil=True)
+# Returns top-k ids and distances, work counters, and (when recording) features and hit logs.
 def _njit_search_es(
     q, vecs, nbr0, upper, upper_row, entry, max_level, k, ef_max,
     deleted, mask, use_mask, visited, tag,
@@ -140,8 +148,10 @@ def _njit_search_es(
     which is how training labels are made). ``forced_ef > 0`` replaces the
     upfront prediction (also for labels).
     """
+    # Descend the upper layers as usual; start with the small probe ef unless mode is fixed.
     ep, dep, nd0 = _njit_descend(q, vecs, upper, upper_row, entry, max_level)
     ef = ef_max if mode == MODE_FIXED else min(max(probe_ef, k), ef_max)
+    # Heaps sized for the largest allowed ef, plus a sorted running top-k for features.
     cap = max(64, 4 * ef_max)
     cd = np.empty(cap, dtype=np.float32)
     ci = np.empty(cap, dtype=np.int32)
@@ -154,6 +164,7 @@ def _njit_search_es(
     log_h = np.empty(64 if record else 1, dtype=np.int32)
     n_log = 0
     n_feat = 0
+    # Seed the walk with the entry point.
     visited[ep] = tag
     nc = _njit_minheap_push(cd, ci, 0, dep, ep)
     nw = 0
@@ -172,11 +183,13 @@ def _njit_search_es(
     last_eval = -1
     prev_kth = np.float32(np.inf)
     width = nbr0.shape[1]
+    # Main best-first loop; stops on normal HNSW termination or when the predicted budget is used.
     while nc > 0:
         if nw >= ef and cd[0] > wd[0]:
             break
         if budget >= 0.0 and hops >= budget:
             break
+        # At the probe point or a checkpoint, compute features and maybe ask the model.
         if hops != last_eval:
             at_probe = mode != MODE_FIXED and not probed and hops >= probe
             at_ckpt = (
@@ -187,6 +200,7 @@ def _njit_search_es(
             if at_probe or at_ckpt:
                 last_eval = hops
                 promising = 0
+                # Count queued candidates that are still closer than the current k-th result.
                 for t in range(nc):
                     if cd[t] < topk[k - 1]:
                         promising += 1
@@ -194,9 +208,11 @@ def _njit_search_es(
                                recent / max(interval, 1), sel, log2n)  # fmt: skip
                 recent = 0
                 prev_kth = topk[k - 1]
+                # When recording training data, keep this checkpoint's features.
                 if record and n_feat < max_ckpt:
                     feats[n_feat, :] = x
                     n_feat += 1
+                # Ask the model: predict log2 budget, scale by mult, and clamp it to a valid ef.
                 if at_probe or mode == MODE_CHECKPOINT:
                     probed = True
                     if at_probe and forced_ef > 0:
@@ -208,9 +224,11 @@ def _njit_search_es(
                         if mode == MODE_CHECKPOINT:
                             budget = float(round(b))
                     ef = min(max(ef, ef_min, k), ef_max)
+                    # Shrink the result heap to the new ef right away.
                     while nw > ef:
                         nw = _njit_maxheap_pop(wd, wi, nw)
                     continue  # re-check termination under the new budget
+        # Expand the closest candidate, same as the normal layer-0 search.
         c = ci[0]
         nc = _njit_minheap_pop(cd, ci, nc)
         hops += 1
@@ -241,17 +259,20 @@ def _njit_search_es(
                         recent += 1
                     # log ties with the k-th too: integer-valued data (SIFT) has
                     # exact ties, and a tie can still end up in the final top-k
+                    # Record when (at which hop) each node entered the top-k; used to make labels.
                     if record and de <= topk[k - 1]:
                         if n_log == log_i.shape[0]:
                             log_i, log_h = _njit_grow(log_i, log_h)
                         log_i[n_log] = e
                         log_h[n_log] = hops
                         n_log += 1
+    # Return results trimmed to k plus the recorded data.
     out_i, out_d = _njit_drain_maxheap(wd, wi, nw)
     kk = min(k, out_i.shape[0])
     return out_i[:kk], out_d[:kk], hops, ndist, feats[:n_feat], log_i[:n_log], log_h[:n_log]
 
 
+# Placeholder forest with no trees, passed in fixed mode when no model is needed.
 _EMPTY_FOREST = {
     "feature": np.zeros(1, np.int32),
     "threshold": np.zeros(1, np.float64),
@@ -262,6 +283,7 @@ _EMPTY_FOREST = {
 }
 
 
+# Python wrapper: fills in defaults (tombstones, mask, visited array) and runs the Numba search.
 def run_es(
     index: HNSWIndex,
     vecs: np.ndarray,
@@ -284,6 +306,7 @@ def run_es(
     max_ckpt: int = 256,
     g: HNSWGraph | None = None,
 ):
+    # Use the caller's captured graph, or the current one.
     g = g or index.g
     f = forest or _EMPTY_FOREST
     if deleted is None:
@@ -307,6 +330,7 @@ def run_es(
 # ---------------------------------------------------------------------------
 
 
+# Build training data by running generous searches on training queries with known true answers.
 def collect(
     index: HNSWIndex,
     vecs: np.ndarray,
@@ -319,6 +343,7 @@ def collect(
     interval, grid = cfg["interval"], cfg["ef_grid"]
     ck_x, ck_y, ck_q = [], [], []
     up_x, up_y = [], []
+    # One query at a time; truth is its exact top-k from brute force.
     for qi, q in enumerate(queries):
         truth = set(gt[qi, :k].tolist())
         # checkpoint rows: features at every checkpoint of a generous search,
@@ -326,6 +351,7 @@ def collect(
         ids, _, hops, _, feats, log_i, log_h = run_es(
             index, vecs, q, k, ef_max, MODE_FIXED, interval=interval, record=True
         )
+        # Find the hop at which each true neighbour first entered the top-k; the latest is the label.
         found = truth & set(ids.tolist())
         first: dict[int, int] = {}
         for node, h in zip(log_i.tolist(), log_h.tolist(), strict=True):
@@ -337,6 +363,7 @@ def collect(
             ck_q.append(qi)
         # upfront row: probe features, label = smallest ef (after the probe)
         # that recovers everything the generous search found
+        # Try ef values from small to large and keep the first that finds everything the big search did.
         best, probe_feats = grid[-1], None
         for ef in grid:
             got, _, _, _, pf, _, _ = run_es(
@@ -351,6 +378,7 @@ def collect(
         if probe_feats is not None:
             up_x.append(probe_feats)
             up_y.append(math.log2(best))
+    # Return checkpoint rows (with query ids for grouping) and upfront rows.
     return {
         "ck_x": np.asarray(ck_x),
         "ck_y": np.asarray(ck_y),
@@ -360,6 +388,7 @@ def collect(
     }
 
 
+# Train one LightGBM model to predict log2 of the budget, then flatten it for Numba.
 def train(
     x: np.ndarray, y: np.ndarray, groups: np.ndarray | None, params: dict[str, Any]
 ) -> dict[str, np.ndarray]:
@@ -372,12 +401,14 @@ def train(
     """
     import lightgbm as lgb
 
+    # Hold out about 10% of queries (whole queries, not rows) for early stopping of training.
     rng = np.random.default_rng(params.get("seed", 42))
     if groups is None:
         groups = np.arange(len(y))
     uq = np.unique(groups)
     val_q = set(rng.choice(uq, max(1, len(uq) // 10), replace=False).tolist())
     is_val = np.array([g in val_q for g in groups])
+    # Small, deterministic LightGBM settings so the forest is cheap to evaluate.
     lgb_params = {
         "objective": "regression",
         "learning_rate": params.get("learning_rate", 0.1),
@@ -390,6 +421,7 @@ def train(
         "num_threads": params.get("num_threads", 8),
         "verbose": -1,
     }
+    # Train with early stopping on the held-out queries, then dump the best model to flat arrays.
     dtrain = lgb.Dataset(x[~is_val], y[~is_val], feature_name=FEATURES)
     dval = lgb.Dataset(x[is_val], y[is_val], reference=dtrain)
     booster = lgb.train(
@@ -402,22 +434,27 @@ def train(
     return flatten(booster.dump_model(num_iteration=booster.best_iteration))
 
 
+# Wraps a trained forest and its settings; this is what a collection loads when early stop is on.
 class EarlyStopModel:
     """A trained budget model plus the search settings it was trained with."""
 
+    # Keep the forest and settings; the "mode" in meta decides upfront vs checkpoint behaviour.
     def __init__(self, forest: dict[str, np.ndarray], meta: dict[str, Any]) -> None:
         self.forest = forest
         self.meta = meta
         self.mode = MODE_UPFRONT if meta["mode"] == "upfront" else MODE_CHECKPOINT
 
+    # Load a saved model JSON from disk.
     @classmethod
     def load(cls, path: str | Path) -> EarlyStopModel:
         forest, meta = load_forest(Path(path))
         return cls(forest, meta)
 
+    # Write the model to a JSON file.
     def save(self, path: str | Path) -> None:
         save_forest(Path(path), self.forest, self.meta)
 
+    # Run one early-stopped search with the settings the model was trained with.
     def search(
         self,
         index: HNSWIndex,
@@ -441,6 +478,7 @@ class EarlyStopModel:
         return ids, ds, {"hops": int(hops), "ndist": int(nd)}
 
 
+# Offline pipeline: label the queries once, then train both the checkpoint and upfront models.
 def fit_models(
     index: HNSWIndex,
     vecs: np.ndarray,
@@ -471,11 +509,13 @@ def fit_models(
     }
 
 
+# Command-line entry: open a collection, compute exact answers, train, and save one model.
 def main() -> None:
     """Train a model for a collection's index from a queries file (offline).
 
     python -m ml.early_stop <collection_dir> <queries.npy> <config.yaml> <out.json>
     """
+    # Imported here so the core library doesn't depend on the engine package.
     import sys
 
     from engine.collection import Collection
@@ -486,6 +526,7 @@ def main() -> None:
     cfg = load_yaml(cfg_path)["training"]
     col = Collection.open(col_dir)
     try:
+        # Exact top-k per query by brute force serves as ground truth for labels.
         queries = np.load(qpath).astype(np.float32)
         vecs = col.store.array
         gt = np.stack([search_flat(vecs, col.n, q, cfg["k"], col.deleted)[0] for q in queries])
@@ -496,5 +537,6 @@ def main() -> None:
         col.close()
 
 
+# Run main() only when this file is executed as a script.
 if __name__ == "__main__":
     main()

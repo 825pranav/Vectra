@@ -18,6 +18,7 @@ bitmap / brute-force strategies) and over a handful of candidate rows (the
 post-filter strategy), so both paths share one definition of "matches".
 """
 
+# Imports: regex for the tokenizer, dataclasses for the AST, NumPy for column masks.
 from __future__ import annotations
 
 import re
@@ -29,6 +30,7 @@ import numpy as np
 from storage.meta import Column
 
 
+# Raised for any bad filter text or type mismatch; it is a ValueError so callers map it to 400s.
 class FilterError(ValueError):
     pass
 
@@ -36,6 +38,7 @@ class FilterError(ValueError):
 # ---- AST --------------------------------------------------------------------
 
 
+# AST leaf: one comparison like price < 50 (attribute name, operator, literal).
 @dataclass(frozen=True)
 class Cmp:
     key: str
@@ -43,30 +46,36 @@ class Cmp:
     value: Any
 
 
+# AST leaf: membership test like category IN ("a", "b").
 @dataclass(frozen=True)
 class In:
     key: str
     values: tuple
 
 
+# AST node: boolean NOT of its child.
 @dataclass(frozen=True)
 class Not:
     arg: Any
 
 
+# AST node: all children must match.
 @dataclass(frozen=True)
 class And:
     args: tuple
 
 
+# AST node: at least one child must match.
 @dataclass(frozen=True)
 class Or:
     args: tuple
 
 
+# Any filter tree node; this is what parse() returns and evaluate()/estimate() consume.
 Node = Cmp | In | Not | And | Or
 
 
+# Turn a tree into normalised text (AND/OR children sorted) so equal filters share one cache entry.
 def canonical(node: Node) -> str:
     """Stable text form, used as the mask-cache key."""
     if isinstance(node, Cmp):
@@ -81,6 +90,7 @@ def canonical(node: Node) -> str:
 
 # ---- parser -------------------------------------------------------------------
 
+# One regex that matches the next token: number, quoted string, operator, punctuation or word.
 _TOKEN = re.compile(
     r"""\s*(?:
         (?P<num>-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)
@@ -91,13 +101,16 @@ _TOKEN = re.compile(
     )""",
     re.VERBOSE,
 )
+# Words that are grammar keywords or boolean literals rather than attribute names.
 _KEYWORDS = {"and", "or", "not", "in", "true", "false"}
 
 
+# Lexer: filter text -> list of (kind, value) tokens, ending with an "end" token.
 def _tokenize(text: str) -> list[tuple[str, Any]]:
     toks: list[tuple[str, Any]] = []
     pos = 0
     text = text.rstrip()
+    # Match tokens left to right; anything the regex can't match is a syntax error.
     while pos < len(text):
         m = _TOKEN.match(text, pos)
         if not m or m.end() == pos:
@@ -105,6 +118,7 @@ def _tokenize(text: str) -> list[tuple[str, Any]]:
         pos = m.end()
         kind = m.lastgroup
         val = m.group(kind)
+        # Classify each match: numbers become floats, quoted strings are unescaped, keywords lowercased.
         if kind == "num":
             toks.append(("lit", float(val)))
         elif kind == "str":
@@ -123,16 +137,21 @@ def _tokenize(text: str) -> list[tuple[str, Any]]:
     return toks
 
 
+# Hand-written recursive-descent parser; one method per grammar rule in the module docstring.
 class _Parser:
+    # Tokenize up front and keep an index into the token list.
     def __init__(self, text: str) -> None:
         self.toks = _tokenize(text)
         self.i = 0
 
+    # Look at the next token's kind without consuming it.
     def peek(self) -> str:
         return self.toks[self.i][0]
 
+    # Friendly names for token kinds, used in error messages.
     _NAMES = {"lit": "a value", "ident": "an attribute name", "end": "end of input"}
 
+    # Consume the next token if it has the expected kind, else raise a readable FilterError.
     def take(self, kind: str) -> Any:
         k, v = self.toks[self.i]
         if k != kind:
@@ -142,11 +161,13 @@ class _Parser:
         self.i += 1
         return v
 
+    # Parse the whole input and insist nothing is left over.
     def parse(self) -> Node:
         node = self.expr()
         self.take("end")
         return node
 
+    # expr: one or more AND-groups joined by OR (OR binds loosest).
     def expr(self) -> Node:
         args = [self.conj()]
         while self.peek() == "or":
@@ -154,6 +175,7 @@ class _Parser:
             args.append(self.conj())
         return args[0] if len(args) == 1 else Or(tuple(args))
 
+    # conj: one or more NOT-terms joined by AND.
     def conj(self) -> Node:
         args = [self.neg()]
         while self.peek() == "and":
@@ -161,6 +183,7 @@ class _Parser:
             args.append(self.neg())
         return args[0] if len(args) == 1 else And(tuple(args))
 
+    # neg: NOT <term>, a parenthesised expression, or a single comparison.
     def neg(self) -> Node:
         if self.peek() == "not":
             self.take("not")
@@ -172,6 +195,7 @@ class _Parser:
             return node
         return self.cmp()
 
+    # cmp: attribute name followed by IN (...) or by an operator and one literal.
     def cmp(self) -> Node:
         key = self.take("ident")
         if self.peek() == "in":
@@ -190,6 +214,7 @@ class _Parser:
         return Cmp(key, op, self.take("lit"))
 
 
+# Public entry: filter text -> AST. Called by Collection.search() before planning.
 def parse(text: str) -> Node:
     return _Parser(text).parse()
 
@@ -197,6 +222,7 @@ def parse(text: str) -> Node:
 # ---- evaluation ---------------------------------------------------------------
 
 
+# Reject comparing a column with a literal of the wrong type (e.g. a string tag with a number).
 def _check_value(col: Column, key: str, v: Any) -> None:
     if col.kind == "str" and not isinstance(v, str):
         raise FilterError(f"attribute {key!r} is a string; compared with {v!r}")
@@ -206,8 +232,11 @@ def _check_value(col: Column, key: str, v: Any) -> None:
         raise FilterError(f"attribute {key!r} is boolean; compared with {v!r}")
 
 
+# Evaluate one comparison over a slice of a column, giving a boolean array.
 def _eval_cmp(col: Column, data: np.ndarray, node: Cmp) -> np.ndarray:
     _check_value(col, node.key, node.value)
+    # String columns hold integer codes, so only == and != make sense; look up the literal's code.
+    # For !=, rows with no value (negative code) are excluded.
     if col.kind == "str":
         if node.op not in ("==", "!="):
             raise FilterError(f"operator {node.op} is not defined for strings")
@@ -215,6 +244,7 @@ def _eval_cmp(col: Column, data: np.ndarray, node: Cmp) -> np.ndarray:
         if node.op == "==":
             return data == code
         return (data != code) & (data >= 0)
+    # Number and bool columns are float64 with NaN for missing; NaN compares False, so it never matches.
     v = float(node.value)
     with np.errstate(invalid="ignore"):
         if node.op == "==":
@@ -230,10 +260,12 @@ def _eval_cmp(col: Column, data: np.ndarray, node: Cmp) -> np.ndarray:
         return data >= v
 
 
+# Turn a filter tree into a boolean mask over rows; used for planner masks and post-filter checks.
 def evaluate(node: Node, columns: dict[str, Column], rows: np.ndarray | int) -> np.ndarray:
     """Boolean mask. ``rows`` is either a count (evaluate ids 0..rows-1) or an
     array of internal ids (evaluate just those, e.g. post-filter candidates)."""
 
+    # Fetch the column for a tag and slice either the first `rows` rows or just the given row ids.
     def data_of(key: str) -> tuple[Column, np.ndarray]:
         col = columns.get(key)
         if col is None:
@@ -241,6 +273,7 @@ def evaluate(node: Node, columns: dict[str, Column], rows: np.ndarray | int) -> 
         d = col.data
         return col, (d[:rows] if isinstance(rows, int) else d[rows])
 
+    # Recursive walk: leaves compare columns, NOT inverts, AND/OR combine child masks.
     def go(n: Node) -> np.ndarray:
         if isinstance(n, Cmp):
             col, d = data_of(n.key)
@@ -268,6 +301,8 @@ def evaluate(node: Node, columns: dict[str, Column], rows: np.ndarray | int) -> 
 # ---- selectivity estimation -----------------------------------------------------
 
 
+# Estimate the share of rows a filter matches using stored per-tag stats (no column scan).
+# Called by the planner on big collections; None means "no stats, count exactly instead".
 def estimate(node: Node, stats: dict[str, dict[str, Any]]) -> float | None:
     """Estimated fraction of records matching, from per-attribute statistics.
 
@@ -277,9 +312,11 @@ def estimate(node: Node, stats: dict[str, dict[str, Any]]) -> float | None:
     attribute has no statistics yet (the caller then measures exactly).
     """
 
+    # Estimated fraction for one comparison against one tag's stats.
     def cmp_frac(st: dict[str, Any], op: str, v: Any) -> float:
         present = 1.0 - st["null_frac"]
         freq = st.get("freq")
+        # Few distinct values: exact counts per value give the answer directly.
         if freq is not None:
             total = max(st["n"], 1)
             key = _freq_key(v)
@@ -290,16 +327,19 @@ def estimate(node: Node, stats: dict[str, dict[str, Any]]) -> float | None:
             cnt = np.array(list(freq.values()), dtype=np.float64)
             m = _num_op(vals, op, float(v))
             return float(cnt[m].sum() / total)
+        # Many values: use the quantile sketch; equality assumes values are spread evenly.
         qs = np.asarray(st.get("quantiles") or [], dtype=np.float64)
         if qs.size == 0:
             return 0.0
         if op in ("==", "!="):
             eq = present / max(st.get("n_distinct", 1), 1) if qs[0] <= v <= qs[-1] else 0.0
             return eq if op == "==" else present - eq
+        # Range ops: interpolate where v falls among the quantiles to get the fraction below it.
         below = float(np.interp(v, qs, np.linspace(0, 1, qs.size), left=0.0, right=1.0))
         frac = below if op in ("<", "<=") else 1.0 - below
         return present * frac
 
+    # Combine leaves: NOT is 1 - p, AND multiplies (assumes independence), OR is 1 - prod(1 - p).
     def go(n: Node) -> float | None:
         if isinstance(n, Cmp | In):
             st = stats.get(n.key)
@@ -321,15 +361,18 @@ def estimate(node: Node, stats: dict[str, dict[str, Any]]) -> float | None:
             out = out + p - out * p
         return out
 
+    # Clamp the final estimate to [0, 1].
     s = go(node)
     return None if s is None else float(min(max(s, 0.0), 1.0))
 
 
+# Key used to look up a value in the frequency table.
 def _freq_key(v: Any) -> str:
     # numbers and booleans are keyed by repr(float), matching Column.stats
     return v if isinstance(v, str) else repr(float(v))
 
 
+# Apply a range operator to an array of distinct values (used with the frequency table).
 def _num_op(vals: np.ndarray, op: str, v: float) -> np.ndarray:
     return {
         "<": vals < v,
